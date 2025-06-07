@@ -308,6 +308,43 @@ impl Backend for MockedBackend {
             format!("<<padding: {:?}, styled: {:?}>>", width, style),
         ))
     }
+
+    fn merge_style(mut left: Self::Style, right: Self::Style) -> Self::Style {
+        left.update(right);
+        left
+    }
+
+    fn reversed_style() -> Self::Style {
+        Self::Style::reversed()
+    }
+
+    fn bold_style() -> Self::Style {
+        Self::Style::bold()
+    }
+
+    fn slow_blink_style() -> Self::Style {
+        Self::Style::slowblink()
+    }
+
+    fn ital_style() -> Self::Style {
+        Self::Style::ital()
+    }
+
+    fn undercurle_style(color: Option<Self::Color>) -> Self::Style {
+        Self::Style::undercurled(color)
+    }
+
+    fn underline_style(color: Option<Self::Color>) -> Self::Style {
+        Self::Style::underlined(color)
+    }
+
+    fn bg_style(color: Self::Color) -> Self::Style {
+        Self::Style::bg(color)
+    }
+
+    fn fg_style(color: Self::Color) -> Self::Style {
+        Self::Style::fg(color)
+    }
 }
 
 impl Write for MockedBackend {

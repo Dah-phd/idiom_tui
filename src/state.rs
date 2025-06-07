@@ -1,5 +1,5 @@
 use super::{
-    backend::{Backend, StyleExt},
+    backend::Backend,
     layout::{DoublePaddedRectIter, IterLines, LineBuilder, Rect},
 };
 
@@ -29,7 +29,7 @@ impl<B: Backend> Default for State<B> {
 #[allow(dead_code)]
 impl<B: Backend> State<B> {
     pub fn new() -> Self {
-        let highlight = <B as Backend>::Style::reversed();
+        let highlight = B::reversed_style();
         Self {
             at_line: 0,
             selected: 0,
@@ -133,7 +133,7 @@ impl<B: Backend> State<B> {
         for (idx, (text, mut style)) in options.enumerate().skip(self.at_line) {
             let Some(line) = lines.next() else { break };
             if idx == self.selected {
-                style.update(self.highlight.clone());
+                style = B::merge_style(style, self.highlight.clone());
             }
             line.render_styled(text, style, backend);
         }

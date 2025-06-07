@@ -1,7 +1,5 @@
 pub mod backend;
 pub mod layout;
-#[cfg(feature = "pty")]
-pub mod pty;
 pub mod state;
 #[cfg(feature = "crossterm_backend")]
 pub mod text_field;

@@ -15,8 +15,8 @@ pub const ERR_MSG: &str = "Rendering (Stdout) Err:";
 /// If stdout is returning errors the program should crash -> use expect
 // impl all utilities although not all are used
 pub trait Backend: Write + Sized + Debug + PartialEq + Default {
-    type Style: StyleExt + Clone;
-    type Color;
+    type Style: Sized + PartialEq + Debug + Clone;
+    type Color: Sized + PartialEq + Debug + Clone;
 
     fn init() -> Self;
     fn exit() -> std::io::Result<()>;
@@ -68,6 +68,24 @@ pub trait Backend: Write + Sized + Debug + PartialEq + Default {
     fn pad(&mut self, width: usize);
     /// padding with empty space styled
     fn pad_styled(&mut self, width: usize, style: Self::Style);
+    /// merge styles
+    fn merge_style(left: Self::Style, right: Self::Style) -> Self::Style;
+    /// Self::Style with revers attr
+    fn reversed_style() -> Self::Style;
+    /// Self::Style with bold attr
+    fn bold_style() -> Self::Style;
+    /// Self::Style with ital attr
+    fn ital_style() -> Self::Style;
+    /// Self::Style with slow blink attr
+    fn slow_blink_style() -> Self::Style;
+    /// Self::Style with bold attr
+    fn underline_style(color: Option<Self::Color>) -> Self::Style;
+    /// Self::Style with bold attr
+    fn undercurle_style(color: Option<Self::Color>) -> Self::Style;
+    /// Self::Style from forground color
+    fn fg_style(color: Self::Color) -> Self::Style;
+    /// Self::Style from background color
+    fn bg_style(color: Self::Color) -> Self::Style;
 }
 
 #[cfg(test)]

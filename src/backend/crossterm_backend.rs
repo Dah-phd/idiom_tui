@@ -299,6 +299,50 @@ impl Backend for CrossTerm {
         }
         .expect(ERR_MSG);
     }
+
+    #[inline]
+    fn merge_style(mut left: ContentStyle, right: ContentStyle) -> ContentStyle {
+        left.update(right);
+        left
+    }
+
+    #[inline]
+    fn reversed_style() -> Self::Style {
+        Self::Style::reversed()
+    }
+
+    #[inline]
+    fn bold_style() -> Self::Style {
+        Self::Style::bold()
+    }
+
+    #[inline]
+    fn slow_blink_style() -> Self::Style {
+        Self::Style::slowblink()
+    }
+
+    #[inline]
+    fn ital_style() -> Self::Style {
+        Self::Style::ital()
+    }
+
+    #[inline]
+    fn undercurle_style(color: Option<Self::Color>) -> Self::Style {
+        Self::Style::undercurled(color)
+    }
+
+    #[inline]
+    fn underline_style(color: Option<Self::Color>) -> Self::Style {
+        Self::Style::underlined(color)
+    }
+
+    fn fg_style(color: Self::Color) -> Self::Style {
+        Self::Style::fg(color)
+    }
+
+    fn bg_style(color: Self::Color) -> Self::Style {
+        Self::Style::bg(color)
+    }
 }
 
 impl Drop for CrossTerm {

@@ -1,7 +1,7 @@
 use crate::{
     Position,
     {
-        backend::{Backend, StyleExt},
+        backend::Backend,
         layout::{BorderSet, Borders, Line, BORDERS},
         utils::UTF8Safe,
     },
@@ -462,7 +462,7 @@ impl Rect {
     pub fn draw_borders<B: Backend>(
         &self,
         set: Option<BorderSet>,
-        fg: Option<<<B as Backend>::Style as StyleExt>::Color>,
+        fg: Option<<B as Backend>::Color>,
         backend: &mut B,
     ) {
         let top = self.borders.contains(Borders::TOP);
@@ -485,7 +485,7 @@ impl Rect {
         let set = set.unwrap_or(BORDERS);
         backend.save_cursor();
         if let Some(color) = fg.clone() {
-            backend.set_style(<B as Backend>::Style::fg(color));
+            backend.set_fg(Some(color));
         };
         if top {
             for col_idx in col..last_col {
