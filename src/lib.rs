@@ -7,6 +7,7 @@ pub mod utils;
 pub mod widgets;
 
 pub use utils::UTF8Safe;
+pub use backend::Backend;
 
 /// This can easily gorow to be a framework itself
 pub fn count_as_string(len: usize) -> String {

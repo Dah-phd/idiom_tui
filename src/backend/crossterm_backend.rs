@@ -70,6 +70,16 @@ impl Write for CrossTerm {
     }
 }
 
+impl CrossTerm {
+    pub fn detached_hide_cursor() {
+        queue!(std::io::stdout(), Show).expect(ERR_MSG);
+    }
+
+    pub fn detached_show_cursor() {
+        queue!(std::io::stdout(), Hide).expect(ERR_MSG);
+    }
+}
+
 impl Backend for CrossTerm {
     type Style = ContentStyle;
     type Color = Color;

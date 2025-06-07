@@ -57,6 +57,7 @@ pub trait Backend: Write + Sized + Debug + PartialEq + Default {
     fn show_cursor(&mut self);
     /// direct hiding cursor - no buffer queing
     fn hide_cursor(&mut self);
+    /// print text at current location - default styling
     fn print<D: Display>(&mut self, text: D);
     /// goes to location and prints text
     fn print_at<D: Display>(&mut self, row: u16, col: u16, text: D);

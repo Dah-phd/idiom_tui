@@ -144,6 +144,12 @@ pub struct MockedBackend {
     pub default_style: MockedStyle,
 }
 
+impl MockedBackend {
+    pub fn detached_hide_cursor() {}
+
+    pub fn detached_show_cursor() {}
+}
+
 impl PartialEq for MockedBackend {
     fn eq(&self, _: &Self) -> bool {
         true
