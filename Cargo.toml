@@ -1,6 +1,6 @@
 [package]
 rust-version = "1.76"
-name = "idiom_ui"
+name = "idiom_tui"
 version = "0.0.1"
 edition = "2021"
 include = ["src/**/*", "Cargo.toml", "LICENCE", "README.MD"]
