@@ -1,4 +1,4 @@
-use super::{
+use crate::{
     backend::Backend,
     layout::{DoublePaddedRectIter, IterLines, LineBuilder, Rect},
 };
