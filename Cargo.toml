@@ -13,7 +13,7 @@ authors = ["Daniel Nikolaev <toolsproed@gmail.com>"]
 
 [features]
 default = []
-crossterm_backend = ["crossterm", "coolor", "serde_json"]
+crossterm_backend = ["crossterm", "coolor", "serde_json", "xterm-query"]
 
 [dependencies]
 bitflags = "2.9.1"
@@ -23,7 +23,7 @@ serde_json = { version = "1.0.140", optional = true }
 unicode-width = "0.2.0"
 
 [target.'cfg(unix)'.dependencies]
-xterm-query = "0.5.2"
+xterm-query = { version = "0.5.2", optional = true }
 
 [profile.dev]
 debug = true
