@@ -1,9 +1,11 @@
-use super::{
+mod state;
+
+use crate::{
     backend::Backend,
-    layout::{IterLines, RectIter},
-    utils::{StrChunks, WriteChunks},
+    layout::{IterLines, Line, RectIter},
+    StrChunks, UTF8Safe, WriteChunks,
 };
-use crate::{layout::Line, UTF8Safe};
+pub use state::State;
 use std::fmt::Display;
 use unicode_width::UnicodeWidthChar;
 

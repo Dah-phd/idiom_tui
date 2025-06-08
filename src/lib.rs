@@ -1,13 +1,15 @@
-pub mod backend;
-pub mod layout;
-pub mod state;
 #[cfg(feature = "crossterm_backend")]
 pub mod text_field;
+
+pub mod backend;
+pub mod layout;
 pub mod utils;
 pub mod widgets;
 
-pub use utils::UTF8Safe;
 pub use backend::Backend;
+pub use utils::{
+    ByteChunks, CharLimitedWidths, StrChunks, UTF8Safe, UTF8SafeStringExt, WriteChunks,
+};
 
 /// This can easily gorow to be a framework itself
 pub fn count_as_string(len: usize) -> String {

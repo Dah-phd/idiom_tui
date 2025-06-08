@@ -1,11 +1,11 @@
 use crate::{
-    backend::{Backend, StyleExt},
-    backend::{MockedBackend, MockedStyle},
+    backend::{Backend, MockedBackend, MockedStyle, StyleExt},
     layout::{Line, Rect},
-    widgets::Writable,
+    widgets::{State, Writable},
 };
 
 use super::{StyledLine, Text};
+type MState = State<MockedBackend>;
 
 #[test]
 fn test_basic_text() {
@@ -321,6 +321,51 @@ fn test_line_wrap_simple() {
             (MockedStyle::default(), ")".to_owned()), // 1
             (MockedStyle::default(), ":".to_owned()), // 1
             (MockedStyle::default(), "<<padding: 5>>".to_owned()), // 5
+        ]
+    );
+}
+
+#[test]
+fn base_state() {
+    let mut backend = MockedBackend::init();
+    let mut state = MState::new();
+    let options = ["tres", "duo", "unus", "nihil"];
+    let rect = Rect::new(0, 0, 4, 3);
+    state.render_list(options.into_iter(), rect, &mut backend);
+    assert_eq!(
+        backend.drain(),
+        vec![
+            (MockedStyle::reversed(), "<<set style>>".to_owned()),
+            (MockedStyle::default(), "<<go to row: 0 col: 0>>".to_owned()),
+            (MockedStyle::reversed(), "tres".to_owned()),
+            (MockedStyle::default(), "<<set style>>".to_owned()),
+            (MockedStyle::default(), "<<go to row: 1 col: 0>>".to_owned()),
+            (MockedStyle::default(), "duo".to_owned()),
+            (MockedStyle::default(), "<<padding: 1>>".to_owned()),
+            (MockedStyle::default(), "<<go to row: 2 col: 0>>".to_owned()),
+            (MockedStyle::default(), "unus".to_owned()),
+        ]
+    );
+
+    state.next(options.len());
+    state.next(options.len());
+    state.next(options.len());
+    state.prev(options.len());
+    state.prev(options.len());
+
+    state.render_list(options.into_iter(), rect, &mut backend);
+    assert_eq!(
+        backend.drain(),
+        vec![
+            (MockedStyle::default(), "<<go to row: 0 col: 0>>".to_owned()),
+            (MockedStyle::default(), "tres".to_owned()),
+            (MockedStyle::reversed(), "<<set style>>".to_owned()),
+            (MockedStyle::default(), "<<go to row: 1 col: 0>>".to_owned()),
+            (MockedStyle::reversed(), "duo".to_owned()),
+            (MockedStyle::reversed(), "<<padding: 1>>".to_owned()),
+            (MockedStyle::default(), "<<set style>>".to_owned()),
+            (MockedStyle::default(), "<<go to row: 2 col: 0>>".to_owned()),
+            (MockedStyle::default(), "unus".to_owned()),
         ]
     );
 }
