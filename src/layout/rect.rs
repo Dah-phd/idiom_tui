@@ -160,8 +160,8 @@ impl Rect {
                 width: 0,
             };
         }
-        let row = self.row + self.height;
         self.height -= 1;
+        let row = self.row + self.height;
         Line {
             row,
             col: self.col,
@@ -200,12 +200,12 @@ impl Rect {
         if self.height == 0 {
             return None;
         }
+        self.height -= 1;
         let line = Line {
             row: self.row + self.height,
             col: self.col,
             width: self.width,
         };
-        self.height -= 1;
         Some(line)
     }
 
