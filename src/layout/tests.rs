@@ -102,6 +102,40 @@ fn split_vertical_rel_overflow() {
 }
 
 #[test]
+fn rect_pop_line() {
+    let mut rect: Rect = (30, 10).into();
+    let last = rect.clone().into_iter().last();
+    let poped = rect.pop_line();
+    assert_eq!(
+        poped,
+        Line {
+            row: 9,
+            col: 0,
+            width: 30
+        }
+    );
+    assert_eq!(Some(poped), last);
+    assert_eq!(Some(rect.clone().pop_line()), rect.next_line_back());
+}
+
+#[test]
+fn rect_next_line_back() {
+    let mut rect: Rect = (30, 10).into();
+    let last = rect.clone().into_iter().last();
+    let next_back = rect.next_line_back();
+    assert_eq!(
+        next_back,
+        Some(Line {
+            row: 9,
+            col: 0,
+            width: 30
+        })
+    );
+    assert_eq!(next_back, last);
+    assert_eq!(Some(rect.clone().pop_line()), rect.next_line_back());
+}
+
+#[test]
 fn render_centered() {
     let width = 50;
     let line = Line {
