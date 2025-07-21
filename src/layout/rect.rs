@@ -80,7 +80,7 @@ impl Rect {
         let mut col = self.col + col_offset; // goes behind col
         if self.height + self.row < height + row {
             if self.height > 3 + row {
-                height = self.height - row;
+                height = (1 + self.height) - row;
             } else if row_offset > 3 {
                 // goes above and finishes before the row;
                 height = std::cmp::min(height, row_offset - 1);
