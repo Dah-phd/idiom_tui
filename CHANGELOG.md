@@ -1,5 +1,8 @@
 ## Includes only major changes (manual updates)
 
+# Version 0.0.5
+- rever faulty fix
+
 # Version 0.0.4
 - fix relative model in shrink case
 

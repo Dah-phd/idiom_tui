@@ -323,3 +323,24 @@ fn render_centered_complex_style_maxed() {
         ]
     )
 }
+
+#[test]
+fn test_rel_modal() {
+    let rect = Rect::new(0, 0, 80, 30);
+    assert_ne!(
+        rect.clone().pop_line().row,
+        rect.modal_relative(26, 10, 20, 7).pop_line().row
+    );
+    assert_eq!(
+        rect.clone().pop_line().row,
+        rect.modal_relative(25, 10, 20, 7).pop_line().row
+    );
+    assert_eq!(
+        rect.clone().pop_line().row,
+        rect.modal_relative(24, 10, 20, 7).pop_line().row
+    );
+    assert_eq!(
+        rect.clone().pop_line().row,
+        rect.modal_relative(23, 10, 20, 7).pop_line().row
+    );
+}
