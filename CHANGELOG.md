@@ -1,5 +1,9 @@
 ## Includes only major changes (manual updates)
 
+# Version 8.0.7
+- relative_modal: fixed column issue when not enough space for modal col
+- relative_modal: fixed row localization if offset bigger that height
+
 # Version 0.0.6
 - fixed relative model (issue was only on rects not starting from row 0)
 

@@ -325,31 +325,131 @@ fn render_centered_complex_style_maxed() {
 }
 
 #[test]
+fn relative_modal() {
+    let base = Rect::new(1, 43, 241, 67);
+    let width = 70;
+
+    let col_offset = 150;
+    let rel = base.modal_relative(32, col_offset, width, 7);
+    assert_eq!(rel.col, base.col + col_offset);
+    assert_eq!(rel.width, width);
+
+    let col_offset = 202;
+    let rel = base.modal_relative(32, col_offset, width, 7);
+    assert_eq!(rel.col, base.col + col_offset);
+    assert_eq!(rel.width, base.width - col_offset as usize);
+
+    let col_offset = 210;
+    let rel = base.modal_relative(32, col_offset, width, 7);
+    assert_eq!(rel.col, base.col + col_offset);
+    assert_eq!(rel.width, base.width - col_offset as usize);
+
+    let rel = base.modal_relative(32, 215, width, 7);
+    assert_eq!(rel.col, 254);
+    assert_eq!(rel.width, 30);
+}
+
+#[test]
 fn test_rel_modal() {
     let rect = Rect::new(0, 0, 80, 30);
     assert_eq!(25, rect.modal_relative(26, 10, 20, 7).pop_line().row);
+
     let mut modal = rect.modal_relative(25, 10, 20, 7);
     assert_eq!(rect.clone().pop_line().row, modal.pop_line().row);
     assert_eq!(modal.row, 26);
+    assert_eq!(modal.height, 3);
+
     let mut modal = rect.modal_relative(24, 10, 20, 7);
     assert_eq!(rect.clone().pop_line().row, modal.pop_line().row);
     assert_eq!(modal.row, 25);
+    assert_eq!(modal.height, 4);
+
     let mut modal = rect.modal_relative(23, 10, 20, 7);
     assert_eq!(rect.clone().pop_line().row, modal.pop_line().row);
     assert_eq!(modal.row, 24);
+    assert_eq!(modal.height, 5);
+
+    // reversed
+
+    let mut modal = rect.modal_relative(26, 10, 20, 7);
+    assert_eq!(25, modal.pop_line().row);
+    assert_eq!(modal.row, 19);
+    assert_eq!(modal.height, 6);
+
+    let mut modal = rect.modal_relative(29, 10, 20, 7);
+    assert_eq!(28, modal.pop_line().row);
+    assert_eq!(modal.row, 22);
+    assert_eq!(modal.height, 6);
+
+    // outside boundries
+
+    let mut modal = rect.modal_relative(30, 10, 20, 7);
+    assert_eq!(31, modal.pop_line().row);
+    assert_eq!(modal.row, 31);
+    assert_eq!(modal.height, 0);
+
 }
 
 #[test]
 fn test_rel_modal2() {
     let rect = Rect::new(10, 0, 80, 30);
     assert_eq!(35, rect.modal_relative(26, 10, 20, 7).pop_line().row);
+
     let mut modal = rect.modal_relative(25, 10, 20, 7);
     assert_eq!(rect.clone().pop_line().row, modal.pop_line().row);
     assert_eq!(modal.row, 36);
+    assert_eq!(modal.height, 3);
+
     let mut modal = rect.modal_relative(24, 10, 20, 7);
     assert_eq!(rect.clone().pop_line().row, modal.pop_line().row);
     assert_eq!(modal.row, 35);
+    assert_eq!(modal.height, 4);
+
     let mut modal = rect.modal_relative(23, 10, 20, 7);
     assert_eq!(rect.clone().pop_line().row, modal.pop_line().row);
     assert_eq!(modal.row, 34);
+    assert_eq!(modal.height, 5);
+
+    // reversed
+
+    let mut modal = rect.modal_relative(26, 10, 20, 7);
+    assert_eq!(35, modal.pop_line().row);
+    assert_eq!(modal.row, 29);
+    assert_eq!(modal.height, 6);
+
+
+    let mut modal = rect.modal_relative(29, 10, 20, 7);
+    assert_eq!(38, modal.pop_line().row);
+    assert_eq!(modal.row, 32);
+    assert_eq!(modal.height, 6);
+
+    // outside boundries
+
+    let mut modal = rect.modal_relative(30, 10, 20, 7);
+    assert_eq!(41, modal.pop_line().row);
+    assert_eq!(modal.row, 41);
+    assert_eq!(modal.height, 0);
+}
+
+#[test]
+fn last_rel_modal_row() {
+    let rect = Rect::new(10, 0, 80, 5);
+    
+    let modal = rect.modal_relative(0, 10, 20, 7);
+    assert_eq!(modal, Rect::new(11, 10, 20, 4));
+
+    let modal = rect.modal_relative(1, 10, 20, 7);
+    assert_eq!(modal, Rect::new(12, 10, 0, 0));
+
+    let modal = rect.modal_relative(2, 10, 20, 7);
+    assert_eq!(modal, Rect::new(13, 10, 0, 0));
+
+    let modal = rect.modal_relative(3, 10, 20, 7);
+    assert_eq!(modal, Rect::new(10, 10, 20, 3));
+
+    let modal = rect.modal_relative(4, 10, 20, 7);
+    assert_eq!(modal, Rect::new(10, 10, 20, 4));
+
+    let modal = rect.modal_relative(5, 10, 20, 7);
+    assert_eq!(modal, Rect::new(16, 10, 0, 0));
 }
