@@ -323,3 +323,28 @@ fn render_centered_complex_style_maxed() {
         ]
     )
 }
+
+#[test]
+fn relative_modal() {
+    let base = Rect::new(1, 43, 241, 67);
+    let width = 70;
+
+    let col_offset = 150;
+    let rel = base.modal_relative(32, col_offset, width, 7);
+    assert_eq!(rel.col, base.col + col_offset);
+    assert_eq!(rel.width, width);
+
+    let col_offset = 202;
+    let rel = base.modal_relative(32, col_offset, width, 7);
+    assert_eq!(rel.col, base.col + col_offset);
+    assert_eq!(rel.width, base.width - col_offset as usize);
+
+    let col_offset = 210;
+    let rel = base.modal_relative(32, col_offset, width, 7);
+    assert_eq!(rel.col, base.col + col_offset);
+    assert_eq!(rel.width, base.width - col_offset as usize);
+
+    let rel = base.modal_relative(32, 215, width, 7);
+    assert_eq!(rel.col, 254);
+    assert_eq!(rel.width, 30);
+}

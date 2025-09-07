@@ -91,8 +91,8 @@ impl Rect {
             };
         };
         if (self.width + self.col as usize) < (width + col as usize) {
-            if self.width > 30 + col as usize {
-                width = self.width - col as usize;
+            if self.width > 30 + col_offset as usize {
+                width = self.width - col_offset as usize;
             } else if self.width > 30 {
                 col = (self.col + self.width as u16) - 30;
                 width = 30;
