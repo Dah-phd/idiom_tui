@@ -65,7 +65,7 @@ impl Rect {
 
     /// Creates floating modal around position (the row within it);
     /// Modal will float around the row (above or below - below is preffered) within Rect;
-    /// Minimum height is 3 otherwise the modal will appear above the location;
+    /// Minimum height is 2 otherwise the modal will appear above the location;
     /// Minumum width is 30 otherwise the modal will appear before the location;
     /// If there is not enough space the rect will be without space height/width = 0;
     #[inline]
@@ -76,15 +76,15 @@ impl Rect {
         mut width: usize,
         mut height: u16,
     ) -> Self {
-        let row_offset = row_offset + 1; // goes to the row below it
-        let mut row = self.row + row_offset;
+        let row_offset_bot = row_offset + 1; // goes to the row below it
+        let mut row = self.row + row_offset_bot;
         let mut col = self.col + col_offset;
         if self.height + self.row < height + row {
-            if self.height > 3 + row_offset {
-                height = self.height - row_offset;
-            } else if row_offset > 3 {
+            if self.height > 3 + row_offset_bot {
+                height = self.height - row_offset_bot;
+            } else if self.height > row_offset && row_offset >= 3 {
                 // goes above and finishes before the row;
-                height = std::cmp::min(height, row_offset - 1);
+                height = std::cmp::min(height, row_offset);
                 row -= height + 1;
             } else {
                 width = 0;
