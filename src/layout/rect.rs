@@ -76,11 +76,12 @@ impl Rect {
         mut width: usize,
         mut height: u16,
     ) -> Self {
-        let mut row = self.row + row_offset + 1; // goes to the row below it
-        let mut col = self.col + col_offset; // goes behind col
+        let row_offset = row_offset + 1; // goes to the row below it
+        let mut row = self.row + row_offset;
+        let mut col = self.col + col_offset;
         if self.height + self.row < height + row {
-            if self.height > 3 + row {
-                height = (1 + self.height) - row;
+            if self.height > 3 + row_offset {
+                height = self.height - row_offset;
             } else if row_offset > 3 {
                 // goes above and finishes before the row;
                 height = std::cmp::min(height, row_offset - 1);

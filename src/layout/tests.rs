@@ -104,7 +104,7 @@ fn split_vertical_rel_overflow() {
 #[test]
 fn rect_pop_line() {
     let mut rect: Rect = (30, 10).into();
-    let last = rect.clone().into_iter().last();
+    let last = rect.into_iter().last();
     let poped = rect.pop_line();
     assert_eq!(
         poped,
@@ -121,7 +121,7 @@ fn rect_pop_line() {
 #[test]
 fn rect_next_line_back() {
     let mut rect: Rect = (30, 10).into();
-    let last = rect.clone().into_iter().last();
+    let last = rect.into_iter().last();
     let next_back = rect.next_line_back();
     assert_eq!(
         next_back,
@@ -347,4 +347,34 @@ fn relative_modal() {
     let rel = base.modal_relative(32, 215, width, 7);
     assert_eq!(rel.col, 254);
     assert_eq!(rel.width, 30);
+}
+
+#[test]
+fn test_rel_modal() {
+    let rect = Rect::new(0, 0, 80, 30);
+    assert_eq!(25, rect.modal_relative(26, 10, 20, 7).pop_line().row);
+    let mut modal = rect.modal_relative(25, 10, 20, 7);
+    assert_eq!(rect.clone().pop_line().row, modal.pop_line().row);
+    assert_eq!(modal.row, 26);
+    let mut modal = rect.modal_relative(24, 10, 20, 7);
+    assert_eq!(rect.clone().pop_line().row, modal.pop_line().row);
+    assert_eq!(modal.row, 25);
+    let mut modal = rect.modal_relative(23, 10, 20, 7);
+    assert_eq!(rect.clone().pop_line().row, modal.pop_line().row);
+    assert_eq!(modal.row, 24);
+}
+
+#[test]
+fn test_rel_modal2() {
+    let rect = Rect::new(10, 0, 80, 30);
+    assert_eq!(35, rect.modal_relative(26, 10, 20, 7).pop_line().row);
+    let mut modal = rect.modal_relative(25, 10, 20, 7);
+    assert_eq!(rect.clone().pop_line().row, modal.pop_line().row);
+    assert_eq!(modal.row, 36);
+    let mut modal = rect.modal_relative(24, 10, 20, 7);
+    assert_eq!(rect.clone().pop_line().row, modal.pop_line().row);
+    assert_eq!(modal.row, 35);
+    let mut modal = rect.modal_relative(23, 10, 20, 7);
+    assert_eq!(rect.clone().pop_line().row, modal.pop_line().row);
+    assert_eq!(modal.row, 34);
 }
