@@ -387,7 +387,6 @@ fn test_rel_modal() {
     assert_eq!(31, modal.pop_line().row);
     assert_eq!(modal.row, 31);
     assert_eq!(modal.height, 0);
-
 }
 
 #[test]
@@ -417,7 +416,6 @@ fn test_rel_modal2() {
     assert_eq!(modal.row, 29);
     assert_eq!(modal.height, 6);
 
-
     let mut modal = rect.modal_relative(29, 10, 20, 7);
     assert_eq!(38, modal.pop_line().row);
     assert_eq!(modal.row, 32);
@@ -434,7 +432,7 @@ fn test_rel_modal2() {
 #[test]
 fn last_rel_modal_row() {
     let rect = Rect::new(10, 0, 80, 5);
-    
+
     let modal = rect.modal_relative(0, 10, 20, 7);
     assert_eq!(modal, Rect::new(11, 10, 20, 4));
 

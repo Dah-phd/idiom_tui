@@ -45,7 +45,6 @@ pub struct Text<B: Backend> {
 }
 
 impl<B: Backend> Text<B> {
-    #[inline]
     pub fn new(text: String, style: Option<<B as Backend>::Style>) -> Self {
         Self {
             char_len: text.char_len(),
@@ -55,7 +54,6 @@ impl<B: Backend> Text<B> {
         }
     }
 
-    #[inline]
     pub fn raw(text: String) -> Self {
         Self {
             char_len: text.char_len(),
@@ -63,6 +61,25 @@ impl<B: Backend> Text<B> {
             style: None,
             text,
         }
+    }
+
+    pub fn new_unchecked(
+        text: String,
+        char_len: usize,
+        width: usize,
+        style: Option<<B as Backend>::Style>,
+    ) -> Self {
+        Self {
+            text,
+            width,
+            char_len,
+            style,
+        }
+    }
+
+    #[inline]
+    pub fn as_str(&self) -> &str {
+        self.text.as_str()
     }
 
     #[inline]
