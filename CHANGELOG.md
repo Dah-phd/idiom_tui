@@ -1,4 +1,6 @@
 ## Includes only major changes (manual updates)
+# Version 0.0.9
+- text_field support for non-ascii
 
 # Version 0.0.8
 - improved Text widget, so it can be used as catched text, holding information about char len and width

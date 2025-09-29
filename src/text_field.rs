@@ -47,7 +47,7 @@ impl Status {
 
 #[derive(Default)]
 pub struct TextField {
-    pub text: String,
+    text: String,
     char: usize,
     select: Option<(usize, usize)>,
 }
@@ -59,6 +59,18 @@ impl TextField {
             text,
             select: None,
         }
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.text.as_str()
+    }
+
+    pub fn len(&self) -> usize {
+        self.text.len()
+    }
+
+    pub fn char_len(&self) -> usize {
+        self.text.chars().count()
     }
 
     pub fn text_set(&mut self, text: String) {
@@ -118,8 +130,8 @@ impl TextField {
             .as_ref()
             .map(|(f, t)| if f > t { (*t, *f) } else { (*f, *t) })
         {
-            Some((from, to)) => self.text_cursor_select(from, to, line_builder),
-            None => self.text_cursor(line_builder),
+            Some((from, to)) if from != to => self.text_cursor_select(from, to, line_builder),
+            _ => self.text_cursor(line_builder),
         };
     }
 
@@ -127,16 +139,20 @@ impl TextField {
         &self,
         mut builder: LineBuilder<B>,
     ) {
+        match self.get_cursor_range() {
+            Some(cursor) => {
+                let Range { start, end } = cursor;
+                builder.push(&self.text[..start]);
+                builder.push_styled(&self.text[cursor], ContentStyle::reversed());
+                builder.push(&self.text[end..]);
+            }
+            None => {
+                builder.push(&self.text);
+                builder.push_styled(" ", ContentStyle::reversed());
+            }
+        }
         if self.char == self.text.len() {
-            builder.push(&self.text);
-            builder.push_styled(" ", ContentStyle::reversed());
         } else {
-            builder.push(self.text[..self.char].as_ref());
-            builder.push_styled(
-                self.text[self.char..=self.char].as_ref(),
-                ContentStyle::reversed(),
-            );
-            builder.push(self.text[self.char + 1..].as_ref());
         };
     }
 
@@ -147,43 +163,52 @@ impl TextField {
         mut builder: LineBuilder<B>,
     ) {
         builder.push(self.text[..from].as_ref());
-        if from == self.char {
-            builder.push_styled(
-                self.text[self.char..=self.char].as_ref(),
-                ContentStyle::reversed(),
-            );
-            builder.push_styled(
-                self.text[from + 1..to].as_ref(),
-                ContentStyle::bg(Color::Rgb {
-                    r: 72,
-                    g: 72,
-                    b: 72,
-                }),
-            );
-            builder.push(self.text[to..].as_ref());
-        } else if self.char == self.text.len() {
-            builder.push_styled(
-                self.text[from..to].as_ref(),
-                ContentStyle::bg(Color::Rgb {
-                    r: 72,
-                    g: 72,
-                    b: 72,
-                }),
-            );
-            builder.push(self.text[to..].as_ref());
-            builder.push_styled(" ", ContentStyle::reversed());
-        } else {
-            builder.push_styled(
-                self.text[from..to].as_ref(),
-                ContentStyle::bg(Color::Rgb {
-                    r: 72,
-                    g: 72,
-                    b: 72,
-                }),
-            );
-            builder.push_styled(self.text[to..=to].as_ref(), ContentStyle::reversed());
-            builder.push(self.text[to + 1..].as_ref());
+        let select_style = ContentStyle::bg(Color::Rgb {
+            r: 72,
+            g: 72,
+            b: 72,
+        });
+        match self.get_cursor_range() {
+            Some(cursor) => {
+                let Range { start, end } = cursor;
+                if from == cursor.start {
+                    builder.push_styled(&self.text[cursor], ContentStyle::reversed());
+                    builder.push_styled(&self.text[end..to], select_style);
+                    builder.push(&self.text[to..]);
+                } else {
+                    builder.push_styled(&self.text[from..start], select_style);
+                    builder.push_styled(&self.text[cursor], ContentStyle::reversed());
+                    builder.push(&self.text[end..]);
+                }
+            }
+            None => {
+                builder.push_styled(self.text[from..to].as_ref(), select_style);
+                builder.push(self.text[to..].as_ref());
+                builder.push_styled(" ", ContentStyle::reversed());
+            }
         }
+    }
+
+    fn get_cursor_range(&self) -> Option<Range<usize>> {
+        let cursor_char = self.text[self.char..].chars().next()?;
+        Some(self.char..self.char + cursor_char.len_utf8())
+    }
+
+    fn next_char(&mut self) {
+        self.char += self.text[self.char..]
+            .chars()
+            .next()
+            .map(|ch| ch.len_utf8())
+            .unwrap_or_default();
+    }
+
+    fn prev_char(&mut self) {
+        self.char -= self.text[..self.char]
+            .chars()
+            .rev()
+            .next()
+            .map(|ch| ch.len_utf8())
+            .unwrap_or_default();
     }
 
     pub fn paste_passthrough(&mut self, clip: String) -> Status {
@@ -213,13 +238,13 @@ impl TextField {
                 };
                 Status::default()
             }
-            KeyCode::Char('x' | 'X') if key.modifiers == KeyModifiers::CONTROL => {
+            KeyCode::Char('v' | 'V') if key.modifiers == KeyModifiers::CONTROL => {
                 Status::PasteInvoked
             }
             KeyCode::Char(ch) => {
                 self.take_selected();
                 self.text.insert(self.char, ch);
-                self.char += 1;
+                self.char += ch.len_utf8();
                 Status::Updated
             }
             KeyCode::Delete => {
@@ -237,14 +262,14 @@ impl TextField {
                     return Status::Updated;
                 };
                 if self.char > 0 && !self.text.is_empty() {
-                    self.char -= 1;
+                    self.prev_char();
                     self.text.remove(self.char);
                     return Status::Updated;
                 };
                 Status::Skipped
             }
             KeyCode::End => {
-                self.char = self.text.len().saturating_sub(1);
+                self.char = self.text.len();
                 Status::UpdatedCursor
             }
             KeyCode::Left => {
@@ -257,53 +282,6 @@ impl TextField {
             }
             _ => Status::NotMapped,
         }
-    }
-
-    fn move_left(&mut self, mods: KeyModifiers) {
-        let should_select = mods.contains(KeyModifiers::SHIFT);
-        if should_select {
-            self.init_select();
-        } else {
-            self.select = None;
-        };
-        self.char = self.char.saturating_sub(1);
-        if mods.contains(KeyModifiers::CONTROL) {
-            // jump
-            while self.char > 0 {
-                let next_idx = self.char - 1;
-                if matches!(self.text.chars().nth(next_idx), Some(ch) if !ch.is_alphabetic() && !ch.is_numeric())
-                {
-                    break;
-                };
-                self.char = next_idx;
-            }
-        };
-        if should_select {
-            self.push_select();
-        };
-    }
-
-    fn move_right(&mut self, mods: KeyModifiers) {
-        let should_select = mods.contains(KeyModifiers::SHIFT);
-        if should_select {
-            self.init_select();
-        } else {
-            self.select = None;
-        };
-        self.char = std::cmp::min(self.text.len(), self.char + 1);
-        if mods.contains(KeyModifiers::CONTROL) {
-            // jump
-            while self.text.len() > self.char {
-                self.char += 1;
-                if matches!(self.text.chars().nth(self.char), Some(ch) if !ch.is_alphabetic() && !ch.is_numeric())
-                {
-                    break;
-                }
-            }
-        };
-        if should_select {
-            self.push_select();
-        };
     }
 
     pub fn copy(&mut self) -> Option<String> {
@@ -328,7 +306,7 @@ impl TextField {
     pub fn push_char(&mut self, ch: char) {
         self.take_selected();
         self.text.insert(self.char, ch);
-        self.char += 1;
+        self.char += ch.len_utf8();
     }
 
     pub fn del(&mut self) {
@@ -345,23 +323,23 @@ impl TextField {
             return;
         }
         if self.char > 0 && !self.text.is_empty() {
-            self.char -= 1;
+            self.prev_char();
             self.text.remove(self.char);
         };
     }
 
     pub fn go_to_end_of_line(&mut self) {
-        self.char = self.text.len().saturating_sub(1);
+        self.char = self.text.len();
     }
 
     pub fn go_left(&mut self) {
-        self.char = self.char.saturating_sub(1);
         self.select = None;
+        self.prev_char();
     }
 
     pub fn select_left(&mut self) {
         self.init_select();
-        self.char = self.char.saturating_sub(1);
+        self.prev_char();
         self.push_select();
     }
 
@@ -377,13 +355,13 @@ impl TextField {
     }
 
     pub fn go_right(&mut self) {
-        self.char = std::cmp::min(self.text.len(), self.char + 1);
         self.select = None;
+        self.next_char();
     }
 
     pub fn select_right(&mut self) {
         self.init_select();
-        self.char = std::cmp::min(self.text.len(), self.char + 1);
+        self.next_char();
         self.push_select();
     }
 
@@ -398,25 +376,57 @@ impl TextField {
         self.push_select();
     }
 
+    fn move_left(&mut self, mods: KeyModifiers) {
+        let should_select = mods.contains(KeyModifiers::SHIFT);
+        if should_select {
+            self.init_select();
+        } else {
+            self.select = None;
+        };
+        self.char = self.char.saturating_sub(1);
+        if mods.contains(KeyModifiers::CONTROL) {
+            // jump
+            self.jump_left_move();
+        };
+        if should_select {
+            self.push_select();
+        };
+    }
+
+    fn move_right(&mut self, mods: KeyModifiers) {
+        let should_select = mods.contains(KeyModifiers::SHIFT);
+        if should_select {
+            self.init_select();
+        } else {
+            self.select = None;
+        };
+        self.char = std::cmp::min(self.text.len(), self.char + 1);
+        if mods.contains(KeyModifiers::CONTROL) {
+            // jump
+            self.jump_right_move();
+        };
+        if should_select {
+            self.push_select();
+        };
+    }
+
     fn jump_left_move(&mut self) {
-        while self.char > 0 {
-            let next_idx = self.char - 1;
-            if matches!(self.text.chars().nth(next_idx), Some(ch) if !ch.is_alphabetic() && !ch.is_numeric())
-            {
-                break;
-            };
-            self.char = next_idx;
+        for (idx, ch) in self.text[..self.char].char_indices().rev() {
+            if !ch.is_alphabetic() && !ch.is_numeric() {
+                return;
+            }
+            self.char = idx;
         }
     }
 
     fn jump_right_move(&mut self) {
-        while self.text.len() > self.char {
-            self.char += 1;
-            if matches!(self.text.chars().nth(self.char), Some(ch) if !ch.is_alphabetic() && !ch.is_numeric())
-            {
-                break;
+        for (idx, ch) in self.text[self.char..].char_indices() {
+            if !ch.is_alphabetic() && !ch.is_numeric() {
+                self.char += idx;
+                return;
             }
         }
+        self.char = self.text.len();
     }
 
     fn init_select(&mut self) {
