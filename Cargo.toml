@@ -12,7 +12,7 @@ categories = []
 authors = ["Daniel Nikolaev <toolsproed@gmail.com>"]
 
 [features]
-default = [] # ["crossterm_backend"]
+default = []
 crossterm_backend = ["crossterm", "coolor", "serde_json", "xterm-query"]
 
 [dependencies]
