@@ -1,4 +1,3 @@
-#[cfg(feature = "crossterm_backend")]
 pub mod text_field;
 
 pub mod backend;
