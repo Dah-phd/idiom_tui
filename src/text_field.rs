@@ -177,6 +177,14 @@ impl TextField {
         true
     }
 
+    pub fn select_all(&mut self) {
+        if self.text.is_empty() {
+            return;
+        }
+        self.select = Some((0, self.text.len()));
+        self.char = self.text.len();
+    }
+
     pub fn push_char(&mut self, ch: char) {
         self.take_selected();
         self.text.insert(self.char, ch);
@@ -1142,5 +1150,14 @@ mod test {
             Status::Updated
         );
         assert_eq!(&field.text, "");
+    }
+
+    #[test]
+    fn test_select_all() {
+        let mut field = TextField::new("data".into());
+        assert!(field.select.is_none());
+        field.select_all();
+        assert_eq!(field.char, 4);
+        assert_eq!(field.get_selected().unwrap(), "data");
     }
 }

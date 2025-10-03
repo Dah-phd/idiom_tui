@@ -1,4 +1,7 @@
 ## Includes only major changes (manual updates)
+# Version 0.0.10
+- added select_all on TextField
+
 # Version 0.0.9
 - text_field support for non-ascii
 - text field no longer depends on crossterm_backend
