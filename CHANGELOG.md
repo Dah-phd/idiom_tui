@@ -1,4 +1,7 @@
 ## Includes only major changes (manual updates)
+# Version 0.1.0
+- feature complete TextField - independent of crossterm_backend
+
 # Version 0.0.11
 - added key mapping for select_all
 

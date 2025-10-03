@@ -185,6 +185,16 @@ impl TextField {
         self.char = self.text.len();
     }
 
+    pub fn start_of_line(&mut self) {
+        self.char = 0;
+        self.select = None;
+    }
+
+    pub fn end_of_line(&mut self) {
+        self.char = self.text.len();
+        self.select = None
+    }
+
     pub fn push_char(&mut self, ch: char) {
         self.take_selected();
         self.text.insert(self.char, ch);
@@ -314,8 +324,12 @@ impl TextField {
                 };
                 Status::Skipped
             }
+            KeyCode::Home => {
+                self.start_of_line();
+                Status::UpdatedCursor
+            }
             KeyCode::End => {
-                self.char = self.text.len();
+                self.end_of_line();
                 Status::UpdatedCursor
             }
             KeyCode::Left => {
@@ -1167,6 +1181,36 @@ mod test {
         );
         assert_eq!(field.char, 4);
         assert_eq!(field.get_selected().unwrap(), "data");
+    }
+
+    #[cfg(feature = "crossterm_backend")]
+    #[test]
+    fn test_start_of_line() {
+        let mut field = TextField::new("data".into());
+        field.select_all();
+        assert_eq!(field.get_selected().unwrap(), "data");
+        assert_eq!(field.char, 4);
+        assert_eq!(
+            field.map(&KeyEvent::new(KeyCode::Home, KeyModifiers::empty())),
+            Status::UpdatedCursor
+        );
+        assert_eq!(field.char, 0);
+        assert!(field.get_selected().is_none());
+    }
+
+    #[cfg(feature = "crossterm_backend")]
+    #[test]
+    fn test_end_of_line() {
+        let mut field = TextField::new("data".into());
+        field.select_jump_left();
+        assert_eq!(field.get_selected().unwrap(), "data");
+        assert_eq!(field.char, 0);
+        assert_eq!(
+            field.map(&KeyEvent::new(KeyCode::End, KeyModifiers::empty())),
+            Status::UpdatedCursor
+        );
+        assert_eq!(field.char, 4);
+        assert!(field.get_selected().is_none());
     }
 
     #[test]
