@@ -283,6 +283,10 @@ impl TextField {
             KeyCode::Char('v' | 'V') if key.modifiers == KeyModifiers::CONTROL => {
                 Status::PasteInvoked
             }
+            KeyCode::Char('a' | 'A') if key.modifiers == KeyModifiers::CONTROL => {
+                self.select_all();
+                Status::UpdatedCursor
+            }
             KeyCode::Char(ch) => {
                 self.take_selected();
                 self.text.insert(self.char, ch);
@@ -1150,6 +1154,19 @@ mod test {
             Status::Updated
         );
         assert_eq!(&field.text, "");
+    }
+
+    #[cfg(feature = "crossterm_backend")]
+    #[test]
+    fn test_select_all_map() {
+        let mut field = TextField::new("data".into());
+        assert!(field.select.is_none());
+        assert_eq!(
+            field.map(&KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL,)),
+            Status::UpdatedCursor
+        );
+        assert_eq!(field.char, 4);
+        assert_eq!(field.get_selected().unwrap(), "data");
     }
 
     #[test]

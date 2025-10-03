@@ -1,4 +1,7 @@
 ## Includes only major changes (manual updates)
+# Version 0.0.11
+- added key mapping for select_all
+
 # Version 0.0.10
 - added select_all on TextField
 
