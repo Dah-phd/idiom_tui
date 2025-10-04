@@ -138,6 +138,7 @@ impl TextField {
             return Status::Skipped;
         }
         self.select = new_select;
+        self.char = token_range.end;
         Status::UpdatedCursor
     }
 

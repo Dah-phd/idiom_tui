@@ -1,4 +1,7 @@
 ## Includes only major changes (manual updates)
+# Version 0.1.2
+- fixed select_token_at_cursor
+
 # Version 0.1.1
 - fixed default features
 

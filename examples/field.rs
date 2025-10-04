@@ -56,6 +56,16 @@ fn main() -> std::io::Result<()> {
                                 }
                             }
                             KeyEvent {
+                                code: KeyCode::Char('e' | 'E'),
+                                modifiers: KeyModifiers::CONTROL,
+                                ..
+                            } => {
+                                text_field.select_token_at_cursor();
+                                let line = screen.get_line(1).unwrap();
+                                text_field.widget(line, cursor_style, select_style, &mut backend);
+                                "Select token range".to_owned()
+                            }
+                            KeyEvent {
                                 code: KeyCode::Esc, ..
                             } => return Ok(()),
                             _ => "Not mapped".to_owned(),
