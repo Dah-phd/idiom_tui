@@ -72,7 +72,7 @@ impl TextField {
 
     pub fn select(&self) -> Option<(usize, usize)> {
         self.select
-            .map(|(from, to)| if from > to { (to, from) } else { (from, to) })
+            .map(|(f, t)| if f > t { (t, f) } else { (f, t) })
     }
 
     pub fn select_drop(&mut self) -> Status {
@@ -231,7 +231,7 @@ impl TextField {
     }
 
     pub fn start_of_line(&mut self) -> Status {
-        if (self.char == 0 || self.text.is_empty()) && self.select.is_none() {
+        if self.char == 0 && self.select.is_none() {
             return Status::Skipped;
         }
         self.char = 0;
@@ -240,7 +240,7 @@ impl TextField {
     }
 
     pub fn end_of_line(&mut self) -> Status {
-        if (self.char == self.text.len() || self.text.is_empty()) && self.select.is_none() {
+        if self.char == self.text.len() && self.select.is_none() {
             return Status::Skipped;
         }
         self.char = self.text.len();
@@ -279,7 +279,7 @@ impl TextField {
     }
 
     pub fn go_left(&mut self) -> Status {
-        std::cmp::max(self.select_drop(), self.prev_char())
+        self.select_drop() + self.prev_char()
     }
 
     pub fn select_left(&mut self) -> Status {
@@ -474,38 +474,35 @@ impl TextField {
             KeyCode::Char('a' | 'A') if key.modifiers == KeyModifiers::CONTROL => {
                 Some(self.select_all())
             }
-            KeyCode::Char(ch) => Some(self.push_char(ch)),
+            KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(self.push_char(ch))
+            }
             KeyCode::Delete => Some(self.del()),
             KeyCode::Backspace => Some(self.backspace()),
             KeyCode::Home => Some(self.start_of_line()),
             KeyCode::End => Some(self.end_of_line()),
-            KeyCode::Left => {
-                self.move_left(key.modifiers);
-                Some(Status::UpdatedCursor)
-            }
-            KeyCode::Right => {
-                self.move_right(key.modifiers);
-                Some(Status::UpdatedCursor)
-            }
+            KeyCode::Left => Some(self.move_left(key.modifiers)),
+            KeyCode::Right => Some(self.move_right(key.modifiers)),
             _ => None,
         }
     }
 
-    fn move_left(&mut self, mods: KeyModifiers) {
+    fn move_left(&mut self, mods: KeyModifiers) -> Status {
         let should_select = mods.contains(KeyModifiers::SHIFT);
-        if should_select {
-            self.init_select();
+        let mut status = if should_select {
+            self.init_select()
         } else {
-            self.select = None;
+            self.select_drop()
         };
-        self.prev_char();
+        status += self.prev_char();
         if mods.contains(KeyModifiers::CONTROL) {
             // jump
-            self.jump_left_move();
+            status += self.jump_left_move();
         };
         if should_select {
-            self.push_select();
+            status += self.push_select();
         };
+        status
     }
 
     fn move_right(&mut self, mods: KeyModifiers) -> Status {
@@ -692,6 +689,45 @@ mod test {
         assert!(!should_jump('🦀'));
     }
 
+    #[test]
+    fn move_status() {
+        let mut t = TextField::new("rand_text".into());
+        assert_eq!(t.char, t.as_str().len());
+        assert!(!t.go_right().is_updated());
+        assert!(!t.jump_right().is_updated());
+        assert!(t.select_right().is_updated());
+        assert!(!t.select_right().is_updated());
+        assert!(!t.select_jump_right().is_updated());
+
+        assert!(t.go_left().is_updated());
+        assert_eq!(t.char, 8);
+        assert!(t.jump_left().is_updated());
+        assert_eq!(t.char, 5);
+        assert!(t.select().is_none());
+        assert!(t.select_jump_left().is_updated());
+        assert_eq!(t.char, 0);
+        assert!(t.select().is_some());
+
+        assert!(t.go_left().is_updated());
+        assert!(t.select().is_none());
+        assert!(!t.go_left().is_updated());
+        assert!(!t.jump_left().is_updated());
+        assert!(t.select_left().is_updated());
+        assert!(!t.select_left().is_updated());
+        assert!(!t.select_jump_left().is_updated());
+
+        assert!(t.go_right().is_updated());
+        assert_eq!(t.char, 1);
+        assert!(t.jump_right().is_updated());
+        assert_eq!(t.char, 4);
+        assert!(t.select().is_none());
+        assert!(t.select_jump_right().is_updated());
+        assert_eq!(t.char, 9);
+        assert!(t.select().is_some());
+        assert!(t.go_right().is_updated());
+        assert!(t.select().is_none());
+    }
+
     #[cfg(feature = "crossterm_backend")]
     #[test]
     fn test_setting() {
@@ -734,13 +770,13 @@ mod test {
         let mut field = TextField::default();
         assert_eq!(
             field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
-            Some(Status::UpdatedCursor)
+            Some(Status::Skipped)
         );
         assert!(field.char == 0);
         field.text_set("12".to_owned());
         assert_eq!(
             field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
-            Some(Status::UpdatedCursor)
+            Some(Status::Skipped)
         );
         assert_eq!(field.char, 2);
         assert_eq!(
@@ -1114,13 +1150,13 @@ mod test {
         let mut field = TextField::default();
         assert_eq!(
             field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
-            Some(Status::UpdatedCursor)
+            Some(Status::Skipped)
         );
         assert!(field.char == 0);
         field.text_set("1🦀2".to_owned());
         assert_eq!(
             field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
-            Some(Status::UpdatedCursor)
+            Some(Status::Skipped)
         );
         assert_eq!(field.char, 6);
         assert_eq!(

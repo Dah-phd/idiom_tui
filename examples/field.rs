@@ -1,4 +1,4 @@
-use crossterm::event::{poll, read, Event, KeyCode, KeyEvent};
+use crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::style::{Color, ContentStyle};
 use idiom_tui::backend::{Backend, CrossTerm, StyleExt};
 use idiom_tui::text_field::{Status, TextField};
@@ -20,21 +20,48 @@ fn main() -> std::io::Result<()> {
     text_field.widget(line, cursor_style, select_style, &mut backend);
 
     loop {
-        if poll(Duration::from_millis(1_000))? {
+        backend.flush_buf();
+        if poll(Duration::from_millis(100))? {
             match read()? {
                 Event::Key(key) => {
                     let Some(result) = text_field.map(key) else {
-                        if matches!(
-                            key,
+                        let msg = match key {
                             KeyEvent {
-                                code: KeyCode::Esc,
+                                code: KeyCode::Char('C' | 'c'),
+                                modifiers: KeyModifiers::CONTROL | KeyModifiers::SHIFT,
                                 ..
+                            } => {
+                                if let Some(text) = text_field.copy() {
+                                    format!("Copied {text}")
+                                } else {
+                                    "Failed copy".to_owned()
+                                }
                             }
-                        ) {
-                            return Ok(());
-                        }
+                            KeyEvent {
+                                code: KeyCode::Char('X' | 'x'),
+                                modifiers: KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                                ..
+                            } => {
+                                if let Some(text) = text_field.cut() {
+                                    let line = screen.get_line(1).unwrap();
+                                    text_field.widget(
+                                        line,
+                                        cursor_style,
+                                        select_style,
+                                        &mut backend,
+                                    );
+                                    format!("Cut {text}")
+                                } else {
+                                    "Failed cut".to_owned()
+                                }
+                            }
+                            KeyEvent {
+                                code: KeyCode::Esc, ..
+                            } => return Ok(()),
+                            _ => "Not mapped".to_owned(),
+                        };
                         let line = screen.get_line(2).unwrap();
-                        line.render("Not mapped", &mut backend);
+                        line.render(&msg, &mut backend);
                         continue;
                     };
                     match result {
@@ -56,10 +83,20 @@ fn main() -> std::io::Result<()> {
                         }
                     }
                 }
+                Event::Paste(clip) => {
+                    if text_field.paste_passthrough(clip).is_updated() {
+                        let line = screen.get_line(1).unwrap();
+                        text_field.widget(line, cursor_style, select_style, &mut backend);
+                        let line = screen.get_line(2).unwrap();
+                        line.render("Paste", &mut backend);
+                    } else {
+                        let line = screen.get_line(2).unwrap();
+                        line.render("Failed paste", &mut backend);
+                    }
+                }
                 Event::Resize(..) => break,
                 _ => (),
             };
-            backend.flush_buf();
         }
     }
 
