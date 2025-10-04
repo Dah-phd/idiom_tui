@@ -12,7 +12,7 @@ categories = []
 authors = ["Daniel Nikolaev <toolsproed@gmail.com>"]
 
 [features]
-default = []
+default = ["crossterm_backend"]
 crossterm_backend = ["crossterm", "coolor", "serde_json", "xterm-query"]
 
 [dependencies]
@@ -28,3 +28,8 @@ xterm-query = { version = "0.5.2", optional = true }
 
 [profile.dev]
 debug = true
+
+# Examples
+[[example]]
+name = "field"
+required-features = ["crossterm_backend"]

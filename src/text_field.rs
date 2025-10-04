@@ -1,5 +1,5 @@
 use super::backend::Backend;
-use core::ops::Range;
+use core::ops::{Add, AddAssign, Range};
 
 #[cfg(feature = "crossterm_backend")]
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -9,40 +9,44 @@ use super::{
     layout::{Line, LineBuilder},
 };
 
-#[derive(Default, PartialEq, Debug)]
+#[derive(Default, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Status {
     #[default]
     Skipped,
-    Updated,
     UpdatedCursor,
-    NotMapped,
-    PasteInvoked,
-    Copy(String),
-    Cut(String),
+    Updated,
 }
 
 impl Status {
     /// includes cursor updates
     pub fn is_updated(&self) -> bool {
         match self {
-            Self::Updated | Self::UpdatedCursor | Self::Cut(..) => true,
-            Self::Skipped | Self::NotMapped | Self::Copy(..) | Self::PasteInvoked => false,
+            Self::Updated | Self::UpdatedCursor => true,
+            Self::Skipped => false,
         }
     }
 
     pub fn is_text_updated(&self) -> bool {
         match self {
-            Self::Updated | Self::Cut(..) => true,
-            Self::UpdatedCursor
-            | Self::Skipped
-            | Self::NotMapped
-            | Self::Copy(..)
-            | Self::PasteInvoked => false,
+            Self::Updated => true,
+            Self::UpdatedCursor | Self::Skipped => false,
         }
     }
+}
 
-    pub fn is_mapped(&self) -> bool {
-        !matches!(self, Self::NotMapped)
+impl Add for Status {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        std::cmp::max(self, rhs)
+    }
+}
+
+impl AddAssign for Status {
+    fn add_assign(&mut self, rhs: Self) {
+        if &rhs > self {
+            *self = rhs;
+        }
     }
 }
 
@@ -59,6 +63,22 @@ impl TextField {
             char: text.len(),
             text,
             select: None,
+        }
+    }
+
+    pub fn cursor(&self) -> usize {
+        self.char
+    }
+
+    pub fn select(&self) -> Option<(usize, usize)> {
+        self.select
+            .map(|(from, to)| if from > to { (to, from) } else { (from, to) })
+    }
+
+    pub fn select_drop(&mut self) -> Status {
+        match self.select.take() {
+            Some(..) => Status::UpdatedCursor,
+            None => Status::Skipped,
         }
     }
 
@@ -84,18 +104,49 @@ impl TextField {
         self.char = self.text.len();
     }
 
+    pub fn cursor_set(&mut self, new_char: usize) -> Status {
+        self.select_drop()
+            + if self.text.len() < new_char {
+                match self.char == self.text.len() {
+                    true => Status::Skipped,
+                    false => {
+                        self.char = self.text.len();
+                        Status::UpdatedCursor
+                    }
+                }
+            } else if new_char == self.char {
+                Status::Skipped
+            } else {
+                self.char = new_char;
+                Status::UpdatedCursor
+            }
+    }
+
     pub fn text_take(&mut self) -> String {
         self.char = 0;
         self.select = None;
         std::mem::take(&mut self.text)
     }
 
-    pub fn text_get_token_at_cursor(&self) -> Option<&str> {
+    pub fn select_token_at_cursor(&mut self) -> Status {
+        let token_range = arg_range_at(&self.text, self.char);
+        if token_range.is_empty() {
+            return Status::Skipped;
+        }
+        let new_select = Some((token_range.start, token_range.end));
+        if self.select == new_select && self.char == token_range.end {
+            return Status::Skipped;
+        }
+        self.select = new_select;
+        Status::UpdatedCursor
+    }
+
+    pub fn get_token_at_cursor(&self) -> Option<&str> {
         let token_range = arg_range_at(&self.text, self.char);
         self.text.get(token_range)
     }
 
-    pub fn text_replace_token(&mut self, new: &str) {
+    pub fn replace_token(&mut self, new: &str) {
         let token_range = arg_range_at(&self.text, self.char);
         self.char = new.len() + token_range.start;
         self.select = None;
@@ -136,11 +187,7 @@ impl TextField {
         cursor_style: <B as Backend>::Style,
         select_style: <B as Backend>::Style,
     ) {
-        match self
-            .select
-            .as_ref()
-            .map(|(f, t)| if f > t { (*t, *f) } else { (*f, *t) })
-        {
+        match self.select() {
             Some((from, to)) if from != to => {
                 self.text_cursor_select(from, to, cursor_style, select_style, line_builder)
             }
@@ -148,200 +195,119 @@ impl TextField {
         };
     }
 
+    // CLIPBOARD LOGIC
+
     pub fn paste_passthrough(&mut self, clip: String) -> Status {
-        if !clip.contains('\n') {
-            self.take_selected();
-            self.text.insert_str(self.char, clip.as_str());
-            self.char += clip.len();
-            return Status::Updated;
+        if clip.contains('\n') {
+            return Status::default();
         };
-        Status::default()
+        self.take_selected();
+        self.text.insert_str(self.char, clip.as_str());
+        self.char += clip.len();
+        Status::Updated
     }
 
+    #[inline]
     pub fn copy(&mut self) -> Option<String> {
         self.get_selected()
     }
 
+    #[inline]
     pub fn cut(&mut self) -> Option<String> {
         self.take_selected()
     }
 
-    /// returns false if clip contains new line
-    pub fn try_paste(&mut self, clip: String) -> bool {
-        if clip.contains('\n') {
-            return false;
-        }
-        self.take_selected();
-        self.text.insert_str(self.char, clip.as_str());
-        self.char += clip.len();
-        true
-    }
-
-    pub fn select_all(&mut self) {
+    pub fn select_all(&mut self) -> Status {
         if self.text.is_empty() {
-            return;
+            return Status::Skipped;
         }
-        self.select = Some((0, self.text.len()));
+        let new_select = Some((0, self.text.len()));
+        if self.char == self.text.len() && self.select == new_select {
+            return Status::Skipped;
+        }
+        self.select = new_select;
         self.char = self.text.len();
+        Status::UpdatedCursor
     }
 
-    pub fn start_of_line(&mut self) {
+    pub fn start_of_line(&mut self) -> Status {
+        if (self.char == 0 || self.text.is_empty()) && self.select.is_none() {
+            return Status::Skipped;
+        }
         self.char = 0;
         self.select = None;
+        Status::UpdatedCursor
     }
 
-    pub fn end_of_line(&mut self) {
+    pub fn end_of_line(&mut self) -> Status {
+        if (self.char == self.text.len() || self.text.is_empty()) && self.select.is_none() {
+            return Status::Skipped;
+        }
         self.char = self.text.len();
-        self.select = None
+        self.select = None;
+        Status::UpdatedCursor
     }
 
-    pub fn push_char(&mut self, ch: char) {
+    pub fn push_char(&mut self, ch: char) -> Status {
         self.take_selected();
         self.text.insert(self.char, ch);
         self.char += ch.len_utf8();
+        Status::Updated
     }
 
-    pub fn del(&mut self) {
+    pub fn del(&mut self) -> Status {
         if self.take_selected().is_some() {
-            return;
-        }
-        if self.char < self.text.len() && !self.text.is_empty() {
+            Status::Updated
+        } else if self.char < self.text.len() && !self.text.is_empty() {
             self.text.remove(self.char);
-        };
+            Status::Updated
+        } else {
+            Status::Skipped
+        }
     }
 
-    pub fn backspace(&mut self) {
+    pub fn backspace(&mut self) -> Status {
         if self.take_selected().is_some() {
-            return;
-        }
-        if self.char > 0 && !self.text.is_empty() {
+            Status::Updated
+        } else if self.char > 0 && !self.text.is_empty() {
             self.prev_char();
             self.text.remove(self.char);
-        };
-    }
-
-    pub fn go_to_end_of_line(&mut self) {
-        self.char = self.text.len();
-    }
-
-    pub fn go_left(&mut self) {
-        self.select = None;
-        self.prev_char();
-    }
-
-    pub fn select_left(&mut self) {
-        self.init_select();
-        self.prev_char();
-        self.push_select();
-    }
-
-    pub fn jump_left(&mut self) {
-        self.select = None;
-        self.prev_char();
-        self.jump_left_move();
-    }
-
-    pub fn select_jump_left(&mut self) {
-        self.init_select();
-        self.prev_char();
-        self.jump_left_move();
-        self.push_select();
-    }
-
-    pub fn go_right(&mut self) {
-        self.select = None;
-        self.next_char();
-    }
-
-    pub fn select_right(&mut self) {
-        self.init_select();
-        self.next_char();
-        self.push_select();
-    }
-
-    pub fn jump_right(&mut self) {
-        self.select = None;
-        self.next_char();
-        self.jump_right_move();
-    }
-
-    pub fn select_jump_right(&mut self) {
-        self.init_select();
-        self.next_char();
-        self.jump_right_move();
-        self.push_select();
-    }
-
-    #[cfg(feature = "crossterm_backend")]
-    pub fn map(&mut self, key: &KeyEvent) -> Status {
-        match key.code {
-            KeyCode::Char('c' | 'C')
-                if key.modifiers == KeyModifiers::CONTROL
-                    || key.modifiers == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
-            {
-                if let Some(clip) = self.get_selected() {
-                    return Status::Copy(clip);
-                };
-                Status::default()
-            }
-            KeyCode::Char('x' | 'X') if key.modifiers == KeyModifiers::CONTROL => {
-                if let Some(clip) = self.take_selected() {
-                    return Status::Cut(clip);
-                };
-                Status::default()
-            }
-            KeyCode::Char('v' | 'V') if key.modifiers == KeyModifiers::CONTROL => {
-                Status::PasteInvoked
-            }
-            KeyCode::Char('a' | 'A') if key.modifiers == KeyModifiers::CONTROL => {
-                self.select_all();
-                Status::UpdatedCursor
-            }
-            KeyCode::Char(ch) => {
-                self.take_selected();
-                self.text.insert(self.char, ch);
-                self.char += ch.len_utf8();
-                Status::Updated
-            }
-            KeyCode::Delete => {
-                if self.take_selected().is_some() {
-                    return Status::Updated;
-                };
-                if self.char < self.text.len() && !self.text.is_empty() {
-                    self.text.remove(self.char);
-                    return Status::Updated;
-                }
-                Status::Skipped
-            }
-            KeyCode::Backspace => {
-                if self.take_selected().is_some() {
-                    return Status::Updated;
-                };
-                if self.char > 0 && !self.text.is_empty() {
-                    self.prev_char();
-                    self.text.remove(self.char);
-                    return Status::Updated;
-                };
-                Status::Skipped
-            }
-            KeyCode::Home => {
-                self.start_of_line();
-                Status::UpdatedCursor
-            }
-            KeyCode::End => {
-                self.end_of_line();
-                Status::UpdatedCursor
-            }
-            KeyCode::Left => {
-                self.move_left(key.modifiers);
-                Status::UpdatedCursor
-            }
-            KeyCode::Right => {
-                self.move_right(key.modifiers);
-                Status::UpdatedCursor
-            }
-            _ => Status::NotMapped,
+            Status::Updated
+        } else {
+            Status::Skipped
         }
+    }
+
+    pub fn go_left(&mut self) -> Status {
+        std::cmp::max(self.select_drop(), self.prev_char())
+    }
+
+    pub fn select_left(&mut self) -> Status {
+        self.init_select() + self.prev_char() + self.push_select()
+    }
+
+    pub fn jump_left(&mut self) -> Status {
+        self.select_drop() + self.prev_char() + self.jump_left_move()
+    }
+
+    pub fn select_jump_left(&mut self) -> Status {
+        self.init_select() + self.prev_char() + self.jump_left_move() + self.push_select()
+    }
+
+    pub fn go_right(&mut self) -> Status {
+        self.select_drop() + self.next_char()
+    }
+
+    pub fn select_right(&mut self) -> Status {
+        self.init_select() + self.next_char() + self.push_select()
+    }
+
+    pub fn jump_right(&mut self) -> Status {
+        self.select_drop() + self.next_char() + self.jump_right_move()
+    }
+
+    pub fn select_jump_right(&mut self) -> Status {
+        self.init_select() + self.next_char() + self.jump_right_move() + self.push_select()
     }
 
     fn text_cursor<B: Backend>(
@@ -398,86 +364,78 @@ impl TextField {
         Some(self.char..self.char + cursor_char.len_utf8())
     }
 
-    fn next_char(&mut self) {
-        self.char += self.text[self.char..]
+    fn next_char(&mut self) -> Status {
+        match self.text[self.char..]
             .chars()
             .next()
             .map(|ch| ch.len_utf8())
-            .unwrap_or_default();
+        {
+            Some(offset) => {
+                self.char += offset;
+                Status::UpdatedCursor
+            }
+            None => Status::Skipped,
+        }
     }
 
-    fn prev_char(&mut self) {
-        self.char -= self.text[..self.char]
+    fn prev_char(&mut self) -> Status {
+        match self.text[..self.char]
             .chars()
             .next_back()
             .map(|ch| ch.len_utf8())
-            .unwrap_or_default();
-    }
-
-    #[cfg(feature = "crossterm_backend")]
-    fn move_left(&mut self, mods: KeyModifiers) {
-        let should_select = mods.contains(KeyModifiers::SHIFT);
-        if should_select {
-            self.init_select();
-        } else {
-            self.select = None;
-        };
-        self.prev_char();
-        if mods.contains(KeyModifiers::CONTROL) {
-            // jump
-            self.jump_left_move();
-        };
-        if should_select {
-            self.push_select();
-        };
-    }
-
-    #[cfg(feature = "crossterm_backend")]
-    fn move_right(&mut self, mods: KeyModifiers) {
-        let should_select = mods.contains(KeyModifiers::SHIFT);
-        if should_select {
-            self.init_select();
-        } else {
-            self.select = None;
-        };
-        self.next_char();
-        if mods.contains(KeyModifiers::CONTROL) {
-            // jump
-            self.jump_right_move();
-        };
-        if should_select {
-            self.push_select();
-        };
-    }
-
-    fn jump_left_move(&mut self) {
-        for (idx, ch) in self.text[..self.char].char_indices().rev() {
-            if !should_jump(ch) {
-                return;
+        {
+            Some(offset) => {
+                self.char -= offset;
+                Status::UpdatedCursor
             }
-            self.char = idx;
+            None => Status::Skipped,
         }
     }
 
-    fn jump_right_move(&mut self) {
+    fn jump_left_move(&mut self) -> Status {
+        let mut new_char = self.char;
+        for (idx, ch) in self.text[..self.char].char_indices().rev() {
+            if !should_jump(ch) {
+                break;
+            }
+            new_char = idx;
+        }
+        if new_char == self.char {
+            return Status::Skipped;
+        }
+        self.char = new_char;
+        Status::UpdatedCursor
+    }
+
+    fn jump_right_move(&mut self) -> Status {
         for (idx, ch) in self.text[self.char..].char_indices() {
             if !should_jump(ch) {
                 self.char += idx;
-                return;
+                return Status::UpdatedCursor;
             }
         }
-        self.char = self.text.len();
-    }
-
-    fn init_select(&mut self) {
-        if self.select.is_none() {
-            self.select = Some((self.char, self.char))
+        if self.char == self.text.len() {
+            return Status::Skipped;
         }
+        self.char = self.text.len();
+        Status::UpdatedCursor
     }
 
-    fn push_select(&mut self) {
-        if let Some((_, to)) = self.select.as_mut() {
-            *to = self.char;
+    fn init_select(&mut self) -> Status {
+        if self.select.is_some() {
+            return Status::Skipped;
+        }
+        self.select = Some((self.char, self.char));
+        Status::UpdatedCursor
+    }
+
+    fn push_select(&mut self) -> Status {
+        match self.select.as_mut() {
+            Some((_, to)) if to != &self.char => {
+                *to = self.char;
+                Status::UpdatedCursor
+            }
+            _ => Status::Skipped,
         }
     }
 
@@ -503,6 +461,69 @@ impl TextField {
         self.text.replace_range(from..to, "");
         self.char = from;
         Some(clip)
+    }
+}
+
+#[cfg(feature = "crossterm_backend")]
+impl TextField {
+    /// Maps crossterm key events
+    /// if None is returned the key is not mapped at all
+    /// Copy / Cut / Paste logic is not included -> use copy / cut / paste_passthrough instead
+    pub fn map(&mut self, key: KeyEvent) -> Option<Status> {
+        match key.code {
+            KeyCode::Char('a' | 'A') if key.modifiers == KeyModifiers::CONTROL => {
+                Some(self.select_all())
+            }
+            KeyCode::Char(ch) => Some(self.push_char(ch)),
+            KeyCode::Delete => Some(self.del()),
+            KeyCode::Backspace => Some(self.backspace()),
+            KeyCode::Home => Some(self.start_of_line()),
+            KeyCode::End => Some(self.end_of_line()),
+            KeyCode::Left => {
+                self.move_left(key.modifiers);
+                Some(Status::UpdatedCursor)
+            }
+            KeyCode::Right => {
+                self.move_right(key.modifiers);
+                Some(Status::UpdatedCursor)
+            }
+            _ => None,
+        }
+    }
+
+    fn move_left(&mut self, mods: KeyModifiers) {
+        let should_select = mods.contains(KeyModifiers::SHIFT);
+        if should_select {
+            self.init_select();
+        } else {
+            self.select = None;
+        };
+        self.prev_char();
+        if mods.contains(KeyModifiers::CONTROL) {
+            // jump
+            self.jump_left_move();
+        };
+        if should_select {
+            self.push_select();
+        };
+    }
+
+    fn move_right(&mut self, mods: KeyModifiers) -> Status {
+        let should_select = mods.contains(KeyModifiers::SHIFT);
+        let mut status = if should_select {
+            self.init_select()
+        } else {
+            self.select_drop()
+        };
+        status += self.next_char();
+        if mods.contains(KeyModifiers::CONTROL) {
+            // jump
+            self.jump_right_move();
+        };
+        if should_select {
+            status += self.push_select();
+        };
+        status
     }
 }
 
@@ -678,7 +699,7 @@ mod test {
         field.text_set("12345".to_owned());
         assert_eq!(&field.text, "12345");
         assert_eq!(field.char, 5);
-        field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT));
+        field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT));
         assert!(field.select.is_some());
         assert_eq!(field.char, 4);
         assert_eq!(&field.text_take(), "12345");
@@ -694,11 +715,11 @@ mod test {
         field.text_set("1234🦀".to_owned());
         assert_eq!(&field.text, "1234🦀");
         assert_eq!(field.char, 8);
-        field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::empty()));
+        field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::empty()));
         assert_eq!(field.char, 4);
-        field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty()));
+        field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty()));
         assert_eq!(field.char, 8);
-        field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT));
+        field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT));
         assert!(field.select.is_some());
         assert_eq!(field.char, 4);
         assert_eq!(&field.text_take(), "1234🦀");
@@ -712,29 +733,29 @@ mod test {
     fn test_move() {
         let mut field = TextField::default();
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert!(field.char == 0);
         field.text_set("12".to_owned());
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 2);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL)),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL)),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 0);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 1);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 0);
     }
@@ -746,13 +767,13 @@ mod test {
         field.go_right();
         field.go_right();
         assert_eq!(field.char, 2);
-        assert_eq!(field.text_get_token_at_cursor(), Some("a🦀sd"));
+        assert_eq!(field.get_token_at_cursor(), Some("a🦀sd"));
         let mut field = TextField::new("a asd xx".to_owned());
         field.char = 0;
         field.go_right();
         field.go_right();
         assert_eq!(field.char, 2);
-        assert_eq!(field.text_get_token_at_cursor(), Some("asd"));
+        assert_eq!(field.get_token_at_cursor(), Some("asd"));
     }
 
     #[cfg(feature = "crossterm_backend")]
@@ -766,8 +787,8 @@ mod test {
         assert_eq!(field.char, 12);
         assert_eq!(field.as_str(), "a a🦀🦀sd");
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty())),
-            Status::Updated
+            field.map(KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty())),
+            Some(Status::Updated)
         );
         assert_eq!(field.char, 11);
         assert_eq!(field.as_str(), "a a🦀🦀d");
@@ -775,8 +796,8 @@ mod test {
         assert_eq!(field.char, 7);
         assert_eq!(field.as_str(), "a a🦀d");
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty())),
-            Status::Updated
+            field.map(KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty())),
+            Some(Status::Updated)
         );
         assert_eq!(field.char, 3);
         assert_eq!(field.as_str(), "a ad");
@@ -794,8 +815,8 @@ mod test {
         field.go_left();
         assert_eq!(field.char, 3);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Delete, KeyModifiers::empty())),
-            Status::Updated
+            field.map(KeyEvent::new(KeyCode::Delete, KeyModifiers::empty())),
+            Some(Status::Updated)
         );
         assert_eq!(field.char, 3);
         assert_eq!(field.as_str(), "a a🦀ssd");
@@ -803,8 +824,8 @@ mod test {
         assert_eq!(field.char, 3);
         assert_eq!(field.as_str(), "a assd");
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Delete, KeyModifiers::empty())),
-            Status::Updated
+            field.map(KeyEvent::new(KeyCode::Delete, KeyModifiers::empty())),
+            Some(Status::Updated)
         );
         assert_eq!(field.char, 3);
         assert_eq!(field.as_str(), "a asd");
@@ -818,36 +839,36 @@ mod test {
     fn select() {
         let mut field = TextField::new("a axxssd as".to_owned());
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL)),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL)),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 9);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 8);
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Left,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 2);
         assert_eq!(field.copy().unwrap(), "axxssd");
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 3);
         assert_eq!(field.copy(), None);
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Right,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 8);
         assert_eq!(field.copy().unwrap(), "xxssd");
@@ -855,36 +876,36 @@ mod test {
         field.char = 0;
         field.select = None;
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 1);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 2);
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Right,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 8);
         assert_eq!(field.copy().unwrap(), "axxssd");
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 7);
         assert_eq!(field.copy(), None);
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Left,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 2);
         assert_eq!(field.copy().unwrap(), "axxss");
@@ -929,58 +950,58 @@ mod test {
     fn select_non_ascii() {
         let mut field = TextField::new("a a🦀🦀ssd a".to_owned());
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL)),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL)),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 15);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 14);
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Left,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 11);
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Left,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Left,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 2);
         assert_eq!(field.copy().unwrap(), "a🦀🦀ssd");
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 3);
         assert_eq!(field.copy(), None);
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Right,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Right,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 14);
         assert_eq!(field.copy().unwrap(), "🦀🦀ssd");
@@ -988,58 +1009,58 @@ mod test {
         field.char = 0;
         field.select = None;
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 1);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 2);
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Right,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 3);
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Right,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Right,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 14);
         assert_eq!(field.copy().unwrap(), "a🦀🦀ssd");
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 13);
         assert_eq!(field.copy(), None);
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Left,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Left,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 7);
         assert_eq!(field.copy().unwrap(), "🦀ss");
@@ -1092,39 +1113,39 @@ mod test {
     fn test_move_non_ascii() {
         let mut field = TextField::default();
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert!(field.char == 0);
         field.text_set("1🦀2".to_owned());
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 6);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL)),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL)),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 5);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL)),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL)),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 0);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 1);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 6);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 5);
     }
@@ -1136,36 +1157,36 @@ mod test {
         field.text_set("a3cde".to_owned());
         field.char = 0;
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Right,
                 KeyModifiers::CONTROL | KeyModifiers::SHIFT,
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.select, Some((0, 5)));
         assert_eq!(field.char, 5);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert!(field.select.is_none());
         assert_eq!(field.char, 5);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT)),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT)),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.select, Some((5, 4)));
         assert_eq!(
-            field.map(&KeyEvent::new(
+            field.map(KeyEvent::new(
                 KeyCode::Left,
                 KeyModifiers::SHIFT | KeyModifiers::CONTROL,
             )),
-            Status::UpdatedCursor
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.select, Some((5, 0)));
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty())),
-            Status::Updated
+            field.map(KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty())),
+            Some(Status::Updated)
         );
         assert_eq!(&field.text, "");
     }
@@ -1176,8 +1197,8 @@ mod test {
         let mut field = TextField::new("data".into());
         assert!(field.select.is_none());
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL,)),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL,)),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 4);
         assert_eq!(field.get_selected().unwrap(), "data");
@@ -1191,8 +1212,8 @@ mod test {
         assert_eq!(field.get_selected().unwrap(), "data");
         assert_eq!(field.char, 4);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::Home, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::Home, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 0);
         assert!(field.get_selected().is_none());
@@ -1206,8 +1227,8 @@ mod test {
         assert_eq!(field.get_selected().unwrap(), "data");
         assert_eq!(field.char, 0);
         assert_eq!(
-            field.map(&KeyEvent::new(KeyCode::End, KeyModifiers::empty())),
-            Status::UpdatedCursor
+            field.map(KeyEvent::new(KeyCode::End, KeyModifiers::empty())),
+            Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 4);
         assert!(field.get_selected().is_none());
@@ -1220,5 +1241,13 @@ mod test {
         field.select_all();
         assert_eq!(field.char, 4);
         assert_eq!(field.get_selected().unwrap(), "data");
+    }
+
+    #[test]
+    fn test_ord_status() {
+        assert!(Status::Skipped < Status::UpdatedCursor);
+        assert!(Status::UpdatedCursor < Status::Updated);
+        assert!(Status::Updated > Status::Skipped);
+        assert!(Status::Updated == Status::Updated);
     }
 }
