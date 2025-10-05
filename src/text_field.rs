@@ -57,7 +57,7 @@ impl AddAssign for Status {
 pub struct TextField {
     text: String,
     char: usize,
-    select: Option<(usize, usize)>,
+    select: Option<usize>,
 }
 
 impl TextField {
@@ -74,8 +74,13 @@ impl TextField {
     }
 
     pub fn select(&self) -> Option<(usize, usize)> {
-        self.select
-            .map(|(f, t)| if f > t { (t, f) } else { (f, t) })
+        self.select.map(|f| {
+            if f > self.char {
+                (self.char, f)
+            } else {
+                (f, self.char)
+            }
+        })
     }
 
     pub fn select_drop(&mut self) -> Status {
@@ -136,7 +141,7 @@ impl TextField {
         if token_range.is_empty() {
             return Status::Skipped;
         }
-        let new_select = Some((token_range.start, token_range.end));
+        let new_select = Some(token_range.start);
         if self.select == new_select && self.char == token_range.end {
             return Status::Skipped;
         }
@@ -305,7 +310,7 @@ impl TextField {
         if self.text.is_empty() {
             return Status::Skipped;
         }
-        let new_select = Some((0, self.text.len()));
+        let new_select = Some(0);
         if self.char == self.text.len() && self.select == new_select {
             return Status::Skipped;
         }
@@ -367,7 +372,7 @@ impl TextField {
     }
 
     pub fn select_left(&mut self) -> Status {
-        self.init_select() + self.prev_char() + self.push_select()
+        self.init_select() + self.prev_char()
     }
 
     pub fn jump_left(&mut self) -> Status {
@@ -375,7 +380,7 @@ impl TextField {
     }
 
     pub fn select_jump_left(&mut self) -> Status {
-        self.init_select() + self.prev_char() + self.jump_left_move() + self.push_select()
+        self.init_select() + self.prev_char() + self.jump_left_move()
     }
 
     pub fn go_right(&mut self) -> Status {
@@ -383,7 +388,7 @@ impl TextField {
     }
 
     pub fn select_right(&mut self) -> Status {
-        self.init_select() + self.next_char() + self.push_select()
+        self.init_select() + self.next_char()
     }
 
     pub fn jump_right(&mut self) -> Status {
@@ -391,7 +396,7 @@ impl TextField {
     }
 
     pub fn select_jump_right(&mut self) -> Status {
-        self.init_select() + self.next_char() + self.jump_right_move() + self.push_select()
+        self.init_select() + self.next_char() + self.jump_right_move()
     }
 
     fn get_cursor_range(&self) -> Option<Range<usize>> {
@@ -460,24 +465,12 @@ impl TextField {
         if self.select.is_some() {
             return Status::Skipped;
         }
-        self.select = Some((self.char, self.char));
+        self.select = Some(self.char);
         Status::UpdatedCursor
     }
 
-    fn push_select(&mut self) -> Status {
-        match self.select.as_mut() {
-            Some((_, to)) if to != &self.char => {
-                *to = self.char;
-                Status::UpdatedCursor
-            }
-            _ => Status::Skipped,
-        }
-    }
-
     fn get_selected(&mut self) -> Option<String> {
-        let (from, to) = self
-            .select
-            .map(|(f, t)| if f > t { (t, f) } else { (f, t) })?;
+        let (from, to) = self.select()?;
         if from == to {
             return None;
         }
@@ -485,10 +478,7 @@ impl TextField {
     }
 
     fn take_selected(&mut self) -> Option<String> {
-        let (from, to) = self
-            .select
-            .take()
-            .map(|(f, t)| if f > t { (t, f) } else { (f, t) })?;
+        let (from, to) = self.select()?;
         if from == to {
             return None;
         }
@@ -534,9 +524,6 @@ impl TextField {
             // jump
             status += self.jump_left_move();
         };
-        if should_select {
-            status += self.push_select();
-        };
         status
     }
 
@@ -551,9 +538,6 @@ impl TextField {
         if mods.contains(KeyModifiers::CONTROL) {
             // jump
             self.jump_right_move();
-        };
-        if should_select {
-            status += self.push_select();
         };
         status
     }
@@ -727,9 +711,11 @@ mod test {
     #[test]
     fn get_select() {
         let mut t = TextField::default();
-        t.select = Some((10, 5));
+        t.select = Some(10);
+        t.char = 5;
         assert_eq!(t.select().unwrap(), (5, 10));
-        t.select = Some((3, 8));
+        t.select = Some(3);
+        t.char = 8;
         assert_eq!(t.select().unwrap(), (3, 8));
     }
 
@@ -1243,7 +1229,7 @@ mod test {
             )),
             Some(Status::UpdatedCursor)
         );
-        assert_eq!(field.select, Some((0, 5)));
+        assert_eq!(field.select, Some(0));
         assert_eq!(field.char, 5);
         assert_eq!(
             field.map(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
@@ -1255,7 +1241,8 @@ mod test {
             field.map(KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT)),
             Some(Status::UpdatedCursor)
         );
-        assert_eq!(field.select, Some((5, 4)));
+        assert_eq!(field.select, Some(5));
+        assert_eq!(field.char, 4);
         assert_eq!(
             field.map(KeyEvent::new(
                 KeyCode::Left,
@@ -1263,7 +1250,8 @@ mod test {
             )),
             Some(Status::UpdatedCursor)
         );
-        assert_eq!(field.select, Some((5, 0)));
+        assert_eq!(field.select, Some(5));
+        assert_eq!(field.char, 0);
         assert_eq!(
             field.map(KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty())),
             Some(Status::Updated)

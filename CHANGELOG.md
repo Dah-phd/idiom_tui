@@ -1,4 +1,7 @@
 ## Includes only major changes (manual updates)
+# Version 0.1.4
+- TextField: sinplified select handle
+
 # Version 0.1.3
 - TextField: fixted rendering of emojies and cursor will allways be visible
 
