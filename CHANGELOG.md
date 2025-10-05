@@ -1,4 +1,7 @@
 ## Includes only major changes (manual updates)
+# Version 0.1.5
+- TextField: fixed cut function
+
 # Version 0.1.4
 - TextField: sinplified select handle
 

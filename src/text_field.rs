@@ -83,6 +83,16 @@ impl TextField {
         })
     }
 
+    pub fn select_take(&mut self) -> Option<(usize, usize)> {
+        self.select.take().map(|f| {
+            if f > self.char {
+                (self.char, f)
+            } else {
+                (f, self.char)
+            }
+        })
+    }
+
     pub fn select_drop(&mut self) -> Status {
         match self.select.take() {
             Some(..) => Status::UpdatedCursor,
@@ -290,20 +300,29 @@ impl TextField {
         if clip.contains('\n') {
             return Status::default();
         };
-        self.take_selected();
+        self.cut();
         self.text.insert_str(self.char, clip.as_str());
         self.char += clip.len();
         Status::Updated
     }
 
-    #[inline]
     pub fn copy(&mut self) -> Option<String> {
-        self.get_selected()
+        let (from, to) = self.select()?;
+        if from == to {
+            return None;
+        }
+        Some(self.text[from..to].to_owned())
     }
 
-    #[inline]
     pub fn cut(&mut self) -> Option<String> {
-        self.take_selected()
+        let (from, to) = self.select_take()?;
+        if from == to {
+            return None;
+        }
+        let clip = self.text[from..to].to_owned();
+        self.text.replace_range(from..to, "");
+        self.char = from;
+        Some(clip)
     }
 
     pub fn select_all(&mut self) -> Status {
@@ -338,14 +357,14 @@ impl TextField {
     }
 
     pub fn push_char(&mut self, ch: char) -> Status {
-        self.take_selected();
+        self.cut();
         self.text.insert(self.char, ch);
         self.char += ch.len_utf8();
         Status::Updated
     }
 
     pub fn del(&mut self) -> Status {
-        if self.take_selected().is_some() {
+        if self.cut().is_some() {
             Status::Updated
         } else if self.char < self.text.len() && !self.text.is_empty() {
             self.text.remove(self.char);
@@ -356,7 +375,7 @@ impl TextField {
     }
 
     pub fn backspace(&mut self) -> Status {
-        if self.take_selected().is_some() {
+        if self.cut().is_some() {
             Status::Updated
         } else if self.char > 0 && !self.text.is_empty() {
             self.prev_char();
@@ -467,25 +486,6 @@ impl TextField {
         }
         self.select = Some(self.char);
         Status::UpdatedCursor
-    }
-
-    fn get_selected(&mut self) -> Option<String> {
-        let (from, to) = self.select()?;
-        if from == to {
-            return None;
-        }
-        Some(self.text[from..to].to_owned())
-    }
-
-    fn take_selected(&mut self) -> Option<String> {
-        let (from, to) = self.select()?;
-        if from == to {
-            return None;
-        }
-        let clip = self.text[from..to].to_owned();
-        self.text.replace_range(from..to, "");
-        self.char = from;
-        Some(clip)
     }
 }
 
@@ -717,6 +717,16 @@ mod test {
         t.select = Some(3);
         t.char = 8;
         assert_eq!(t.select().unwrap(), (3, 8));
+    }
+
+    #[test]
+    fn test_cut() {
+        let mut t = TextField::new("some text".into());
+        assert_eq!(t.select_jump_left(), Status::UpdatedCursor);
+        let cut = t.cut().unwrap();
+        assert_eq!("text", cut);
+        assert!(t.select().is_none());
+        assert_eq!(t.char, 5);
     }
 
     #[test]
@@ -1269,7 +1279,7 @@ mod test {
             Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 4);
-        assert_eq!(field.get_selected().unwrap(), "data");
+        assert_eq!(field.copy().unwrap(), "data");
     }
 
     #[cfg(feature = "crossterm_backend")]
@@ -1277,14 +1287,14 @@ mod test {
     fn test_start_of_line() {
         let mut field = TextField::new("data".into());
         field.select_all();
-        assert_eq!(field.get_selected().unwrap(), "data");
+        assert_eq!(field.copy().unwrap(), "data");
         assert_eq!(field.char, 4);
         assert_eq!(
             field.map(KeyEvent::new(KeyCode::Home, KeyModifiers::empty())),
             Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 0);
-        assert!(field.get_selected().is_none());
+        assert!(field.copy().is_none());
     }
 
     #[cfg(feature = "crossterm_backend")]
@@ -1292,14 +1302,14 @@ mod test {
     fn test_end_of_line() {
         let mut field = TextField::new("data".into());
         field.select_jump_left();
-        assert_eq!(field.get_selected().unwrap(), "data");
+        assert_eq!(field.copy().unwrap(), "data");
         assert_eq!(field.char, 0);
         assert_eq!(
             field.map(KeyEvent::new(KeyCode::End, KeyModifiers::empty())),
             Some(Status::UpdatedCursor)
         );
         assert_eq!(field.char, 4);
-        assert!(field.get_selected().is_none());
+        assert!(field.copy().is_none());
     }
 
     #[test]
@@ -1308,7 +1318,7 @@ mod test {
         assert!(field.select.is_none());
         field.select_all();
         assert_eq!(field.char, 4);
-        assert_eq!(field.get_selected().unwrap(), "data");
+        assert_eq!(field.copy().unwrap(), "data");
     }
 
     #[test]
