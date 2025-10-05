@@ -1,4 +1,7 @@
 ## Includes only major changes (manual updates)
+# Version 0.1.3
+- TextField: fixted rendering of emojies and cursor will allways be visible
+
 # Version 0.1.2
 - fixed select_token_at_cursor
 

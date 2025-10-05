@@ -1,5 +1,6 @@
-use super::backend::Backend;
+use super::{backend::Backend, UTF8Safe};
 use core::ops::{Add, AddAssign, Range};
+use unicode_width::UnicodeWidthChar;
 
 #[cfg(feature = "crossterm_backend")]
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -50,6 +51,8 @@ impl AddAssign for Status {
     }
 }
 
+/// Single line input field
+/// good for search boxes and filters
 #[derive(Default)]
 pub struct TextField {
     text: String,
@@ -154,6 +157,8 @@ impl TextField {
         self.text.replace_range(token_range, new);
     }
 
+    // RENDER
+
     /// returns blockless paragraph widget " >> inner text"
     pub fn widget<B: Backend>(
         &self,
@@ -188,12 +193,90 @@ impl TextField {
         cursor_style: <B as Backend>::Style,
         select_style: <B as Backend>::Style,
     ) {
+        if line_builder.width() == 0 {
+            return;
+        }
         match self.select() {
             Some((from, to)) if from != to => {
                 self.text_cursor_select(from, to, cursor_style, select_style, line_builder)
             }
             _ => self.text_cursor(cursor_style, line_builder),
         };
+    }
+
+    fn text_cursor<B: Backend>(
+        &self,
+        cursor_style: <B as Backend>::Style,
+        mut builder: LineBuilder<B>,
+    ) {
+        let offset = self.calculate_width_offset(builder.width());
+        match self.get_cursor_range() {
+            Some(cursor) => {
+                let Range { start, end } = cursor;
+                builder.push(&self.text[offset..start]);
+                builder.push_styled(&self.text[cursor], cursor_style);
+                builder.push(&self.text[end..]);
+            }
+            None => {
+                builder.push(&self.text[offset..]);
+                builder.push_styled(" ", cursor_style);
+            }
+        }
+    }
+
+    fn text_cursor_select<B: Backend>(
+        &self,
+        mut from: usize,
+        to: usize,
+        cursor_style: <B as Backend>::Style,
+        select_style: <B as Backend>::Style,
+        mut builder: LineBuilder<B>,
+    ) {
+        let offset = self.calculate_width_offset(builder.width());
+        if offset < from {
+            builder.push(self.text[offset..from].as_ref());
+        } else {
+            from = offset;
+        }
+        match self.get_cursor_range() {
+            Some(cursor) => {
+                let Range { start, end } = cursor;
+                if from == cursor.start {
+                    builder.push_styled(&self.text[cursor], cursor_style);
+                    builder.push_styled(&self.text[end..to], select_style);
+                    builder.push(&self.text[to..]);
+                } else {
+                    builder.push_styled(&self.text[from..start], select_style);
+                    builder.push_styled(&self.text[cursor], cursor_style);
+                    builder.push(&self.text[end..]);
+                }
+            }
+            None => {
+                builder.push_styled(&self.text[from..], select_style);
+                builder.push_styled(" ", cursor_style);
+            }
+        }
+    }
+
+    fn calculate_width_offset(&self, max_width: usize) -> usize {
+        // in all cases byte index is greater than column width
+        // so if avail width is bigger it is safe to skip offset
+        // in most cases at least one char after cursor will be visible
+        // in some using very strange chaars (over 3 cols - it could have visual artefacts)
+        if self.char + 1 < max_width {
+            return 0;
+        }
+        let cursor_prefix = &self.text[..self.char];
+        let mut cursor_prefix_w = cursor_prefix.width() + 2;
+        for (offset, ch) in cursor_prefix.char_indices() {
+            if max_width > cursor_prefix_w {
+                return offset;
+            }
+            if let Some(ch_width) = ch.width() {
+                cursor_prefix_w = cursor_prefix_w.saturating_sub(ch_width);
+            }
+        }
+        self.char
     }
 
     // CLIPBOARD LOGIC
@@ -309,55 +392,6 @@ impl TextField {
 
     pub fn select_jump_right(&mut self) -> Status {
         self.init_select() + self.next_char() + self.jump_right_move() + self.push_select()
-    }
-
-    fn text_cursor<B: Backend>(
-        &self,
-        cursor_style: <B as Backend>::Style,
-        mut builder: LineBuilder<B>,
-    ) {
-        match self.get_cursor_range() {
-            Some(cursor) => {
-                let Range { start, end } = cursor;
-                builder.push(&self.text[..start]);
-                builder.push_styled(&self.text[cursor], cursor_style);
-                builder.push(&self.text[end..]);
-            }
-            None => {
-                builder.push(&self.text);
-                builder.push_styled(" ", cursor_style);
-            }
-        }
-    }
-
-    fn text_cursor_select<B: Backend>(
-        &self,
-        from: usize,
-        to: usize,
-        cursor_style: <B as Backend>::Style,
-        select_style: <B as Backend>::Style,
-        mut builder: LineBuilder<B>,
-    ) {
-        builder.push(self.text[..from].as_ref());
-        match self.get_cursor_range() {
-            Some(cursor) => {
-                let Range { start, end } = cursor;
-                if from == cursor.start {
-                    builder.push_styled(&self.text[cursor], cursor_style);
-                    builder.push_styled(&self.text[end..to], select_style);
-                    builder.push(&self.text[to..]);
-                } else {
-                    builder.push_styled(&self.text[from..start], select_style);
-                    builder.push_styled(&self.text[cursor], cursor_style);
-                    builder.push(&self.text[end..]);
-                }
-            }
-            None => {
-                builder.push_styled(self.text[from..to].as_ref(), select_style);
-                builder.push(self.text[to..].as_ref());
-                builder.push_styled(" ", cursor_style);
-            }
-        }
     }
 
     fn get_cursor_range(&self) -> Option<Range<usize>> {
@@ -688,6 +722,15 @@ mod test {
         assert!(should_jump('1'));
         assert!(should_jump('b'));
         assert!(!should_jump('🦀'));
+    }
+
+    #[test]
+    fn get_select() {
+        let mut t = TextField::default();
+        t.select = Some((10, 5));
+        assert_eq!(t.select().unwrap(), (5, 10));
+        t.select = Some((3, 8));
+        assert_eq!(t.select().unwrap(), (3, 8));
     }
 
     #[test]

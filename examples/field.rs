@@ -13,7 +13,8 @@ fn main() -> std::io::Result<()> {
     });
 
     let mut backend = CrossTerm::init();
-    let screen = CrossTerm::screen()?;
+    let mut screen = CrossTerm::screen()?;
+    screen.width = 50;
     let mut text_field = TextField::default();
 
     let line = screen.get_line(1).unwrap();
