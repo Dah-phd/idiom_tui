@@ -53,7 +53,7 @@ impl AddAssign for Status {
 
 /// Single line input field
 /// good for search boxes and filters
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct TextField {
     text: String,
     char: usize,

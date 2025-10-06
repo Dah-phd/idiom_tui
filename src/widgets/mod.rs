@@ -36,7 +36,7 @@ pub trait Writable<B: Backend>: Display {
 }
 
 /// Represents word with additional meta data such as width, style and number of chars, useful when rendering multiple times the same string
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct Text<B: Backend> {
     text: String,
     char_len: usize,
@@ -331,7 +331,7 @@ impl<B: Backend> Writable<B> for Text<B> {
 }
 
 /// Collection of styled texts, useful when rendering multiple times the same string, as it holds meta data for width / charcer len of words
-#[derive(Clone, PartialEq, Default)]
+#[derive(Clone, PartialEq, Default, Debug)]
 pub struct StyledLine<B: Backend> {
     inner: Vec<Text<B>>,
 }

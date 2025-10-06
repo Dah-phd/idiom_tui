@@ -1,4 +1,7 @@
 ## Includes only major changes (manual updates)
+# Version 0.1.6
+- extension traits on widgets/layout
+
 # Version 0.1.5
 - TextField: fixed cut function
 
