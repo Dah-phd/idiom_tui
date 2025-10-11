@@ -282,6 +282,7 @@ impl Rect {
         }
     }
 
+    /// returns smaller rect if self is too small
     pub fn right_top_corner(&self, mut height: u16, mut width: usize) -> Self {
         height = std::cmp::min(self.height, height);
         width = std::cmp::min(self.width, width);
@@ -295,6 +296,7 @@ impl Rect {
         }
     }
 
+    /// returns smaller rect if self is too small
     pub fn left_top_corner(&self, mut height: u16, mut width: usize) -> Self {
         height = std::cmp::min(self.height, height);
         width = std::cmp::min(self.width, width);
@@ -307,6 +309,7 @@ impl Rect {
         }
     }
 
+    /// returns smaller rect if self is too small
     pub fn right_bot_corner(&self, mut height: u16, mut width: usize) -> Self {
         height = std::cmp::min(self.height, height);
         width = std::cmp::min(self.width, width);
@@ -321,13 +324,14 @@ impl Rect {
         }
     }
 
+    /// returns smaller rect if self is too small
     pub fn left_bot_corner(&self, mut height: u16, mut width: usize) -> Self {
         height = std::cmp::min(self.height, height);
         width = std::cmp::min(self.width, width);
-        let col = self.col + (self.width - width) as u16;
+        let row = self.row + (self.height - height);
         Self {
-            row: self.row,
-            col,
+            row,
+            col: self.col,
             width,
             height,
             ..Default::default()

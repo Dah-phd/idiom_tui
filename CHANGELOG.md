@@ -1,4 +1,7 @@
 ## Includes only major changes (manual updates)
+# Version 0.1.7
+- fixed Rect::left_bot_corner
+
 # Version 0.1.6
 - extension traits on widgets/layout
 

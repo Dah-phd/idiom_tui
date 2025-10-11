@@ -451,3 +451,36 @@ fn last_rel_modal_row() {
     let modal = rect.modal_relative(5, 10, 20, 7);
     assert_eq!(modal, Rect::new(16, 10, 0, 0));
 }
+
+#[test]
+fn right_top_cornet() {
+    let rect = Rect::new(0, 0, 40, 2).right_top_corner(5, 60);
+    assert_eq!(Rect::new(0, 0, 40, 2), rect);
+    let rect = Rect::new(0, 0, 100, 20).right_top_corner(5, 60);
+    assert_eq!(Rect::new(0, 40, 60, 5), rect);
+}
+
+#[test]
+fn left_top_cornet() {
+    let rect = Rect::new(0, 0, 40, 2).left_top_corner(5, 60);
+    assert_eq!(Rect::new(0, 0, 40, 2), rect);
+    let rect = Rect::new(0, 0, 100, 20).left_top_corner(5, 60);
+    assert_eq!(Rect::new(0, 0, 60, 5), rect);
+}
+
+
+#[test]
+fn right_bot_cornet() {
+    let rect = Rect::new(0, 0, 40, 2).right_bot_corner(5, 60);
+    assert_eq!(Rect::new(0, 0, 40, 2), rect);
+    let rect = Rect::new(0, 0, 100, 20).right_bot_corner(5, 60);
+    assert_eq!(Rect::new(15, 40, 60, 5), rect);
+}
+
+#[test]
+fn left_bot_cornet() {
+    let rect = Rect::new(0, 0, 40, 2).left_bot_corner(5, 60);
+    assert_eq!(Rect::new(0, 0, 40, 2), rect);
+    let rect = Rect::new(0, 0, 100, 20).left_bot_corner(5, 60);
+    assert_eq!(Rect::new(15, 0, 60, 5), rect);
+}
