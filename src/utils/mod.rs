@@ -3,8 +3,11 @@ pub use chunks::{ByteChunks, CharLimitedWidths, StrChunks, WriteChunks};
 use std::ops::Range;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+pub type Utf8Byte = usize;
+pub type Utf16Byte = usize;
+
 /// Trait allowing UTF8 safe operations on str/String
-pub trait UTF8Safe {
+pub trait UTFSafe {
     /// returns str that will fit into width of columns, removing chars at the end returning info about remaining width
     fn truncate_width(&self, width: usize) -> (usize, &str);
     /// returns str that will fit into width of columns, removing chars from the start returng info about remaining width
@@ -24,39 +27,47 @@ pub trait UTF8Safe {
     /// utf16 len
     fn utf16_len(&self) -> usize;
     /// return utf8 split at char idx
-    fn utf8_split_at(&self, mid: usize) -> (&str, &str);
+    fn split_at_char(&self, mid: usize) -> (&str, &str);
     /// splits utf8 if not ascii (needs precalculated utf8 len)
-    fn utf8_cached_split_at(&self, mid: usize, utf8_len: usize) -> (&str, &str);
+    fn cached_split_at_char(&self, mid: usize, utf8_len: usize) -> (&str, &str);
     /// limits str within range based on utf char locations
     /// panics if out of bounds
-    fn utf8_unsafe_get(&self, from: usize, to: usize) -> &str;
+    fn unchecked_get_char_range(&self, from: usize, to: usize) -> &str;
     /// removes "from" chars from the begining of the string
     /// panics if out of bounds
-    fn utf8_unsafe_get_from(&self, from: usize) -> &str;
+    fn unchecked_get_from_char(&self, from: usize) -> &str;
     /// limits str to char idx
     /// panics if out of bounds
-    fn utf8_unsafe_get_to(&self, to: usize) -> &str;
+    fn unchecked_get_to_char(&self, to: usize) -> &str;
     /// get checked utf8 slice
-    fn utf8_get(&self, from: usize, to: usize) -> Option<&str>;
+    fn get_char_range(&self, from_char: usize, to_char: usize) -> Option<&str>;
     /// get checked utf8 from
-    fn utf8_get_from(&self, from: usize) -> Option<&str>;
+    fn get_from_char(&self, from_char: usize) -> Option<&str>;
     /// get checked utf8 to
-    fn utf8_get_to(&self, to: usize) -> Option<&str>;
+    fn get_to_char(&self, to_char: usize) -> Option<&str>;
 }
 
 /// String specific extension
-pub trait UTF8SafeStringExt {
-    fn utf8_insert(&mut self, idx: usize, ch: char);
-    fn utf8_insert_str(&mut self, idx: usize, string: &str);
-    fn utf8_remove(&mut self, idx: usize) -> char;
-    fn utf8_replace_range(&mut self, range: Range<usize>, string: &str);
-    fn utf8_replace_till(&mut self, to: usize, string: &str);
-    fn utf8_replace_from(&mut self, from: usize, string: &str);
-    fn utf8_split_off(&mut self, at: usize) -> Self;
+pub trait UTFSafeStringExt {
+    fn insert_at_char(&mut self, idx: usize, ch: char);
+    fn insert_at_char_with_utf8_idx(&mut self, idx: usize, ch: char) -> Utf8Byte;
+    fn insert_at_char_with_utf16_idx(&mut self, idx: usize, ch: char) -> Utf16Byte;
+    fn insert_str_at_char(&mut self, idx: usize, string: &str);
+    fn insert_str_at_char_with_utf8_idx(&mut self, idx: usize, string: &str) -> Utf8Byte;
+    fn insert_str_at_char_with_utf16_idx(&mut self, idx: usize, string: &str) -> Utf16Byte;
+    fn remove_at_char(&mut self, idx: usize) -> char;
+    /// returns the removed char with the utf8 idx from where it was removed
+    fn remove_at_char_with_utf8_idx(&mut self, idx: usize) -> (Utf8Byte, char);
+    /// returns the removed char with the utf16 idx from where it was removed
+    fn remove_at_char_with_utf16_idx(&mut self, idx: usize) -> (Utf16Byte, char);
+    fn replace_char_range(&mut self, range: Range<usize>, string: &str);
+    fn replace_till_char(&mut self, to: usize, string: &str);
+    fn replace_from_char(&mut self, from: usize, string: &str);
+    fn split_off_at_char(&mut self, at: usize) -> Self;
 }
 
-impl UTF8Safe for str {
-    #[inline(always)]
+impl UTFSafe for str {
+    #[inline]
     fn truncate_width(&self, mut width: usize) -> (usize, &str) {
         let mut end = 0;
         for char in self.chars() {
@@ -70,7 +81,7 @@ impl UTF8Safe for str {
         (width, self)
     }
 
-    #[inline(always)]
+    #[inline]
     fn truncate_width_start(&self, mut width: usize) -> (usize, &str) {
         let mut start = 0;
         for char in self.chars().rev() {
@@ -84,7 +95,7 @@ impl UTF8Safe for str {
         (width, self)
     }
 
-    #[inline(always)]
+    #[inline]
     fn truncate_if_wider(&self, width: usize) -> Result<&str, usize> {
         let mut end = 0;
         let mut current_width = 0;
@@ -98,7 +109,7 @@ impl UTF8Safe for str {
         Err(current_width)
     }
 
-    #[inline(always)]
+    #[inline]
     fn truncate_if_wider_start(&self, width: usize) -> Result<&str, usize> {
         let mut start = 0;
         let mut current_width = 0;
@@ -112,7 +123,7 @@ impl UTF8Safe for str {
         Err(current_width)
     }
 
-    #[inline(always)]
+    #[inline]
     fn width_split(&self, mut width: usize) -> (&str, Option<&str>) {
         for (current_mid, ch) in self.char_indices() {
             let ch_width = ch.width().unwrap_or(0);
@@ -129,209 +140,249 @@ impl UTF8Safe for str {
         (self, None)
     }
 
-    #[inline(always)]
+    #[inline]
     fn width(&self) -> usize {
         UnicodeWidthStr::width(self)
     }
 
-    #[inline(always)]
+    #[inline]
     fn width_at(&self, at: usize) -> usize {
         self.chars()
             .take(at)
             .fold(0, |l, r| l + UnicodeWidthChar::width(r).unwrap_or(0))
     }
 
-    #[inline(always)]
+    #[inline]
     fn char_len(&self) -> usize {
         self.chars().count()
     }
 
-    #[inline(always)]
+    #[inline]
     fn utf16_len(&self) -> usize {
         self.chars().fold(0, |sum, ch| sum + ch.len_utf16())
     }
 
-    #[inline(always)]
-    fn utf8_split_at(&self, mid: usize) -> (&str, &str) {
+    #[inline]
+    fn split_at_char(&self, mid: usize) -> (&str, &str) {
         self.split_at(prev_char_bytes_end(self, mid))
     }
 
-    #[inline(always)]
-    fn utf8_cached_split_at(&self, mid: usize, utf8_len: usize) -> (&str, &str) {
+    #[inline]
+    fn cached_split_at_char(&self, mid: usize, utf8_len: usize) -> (&str, &str) {
         if self.len() == utf8_len {
             return self.split_at(mid);
         }
-        self.utf8_split_at(mid)
+        self.split_at_char(mid)
     }
 
-    #[inline(always)]
-    fn utf8_get(&self, from: usize, to: usize) -> Option<&str> {
+    #[inline]
+    fn get_char_range(&self, from: usize, to: usize) -> Option<&str> {
         maybe_prev_char_bytes_end(self, from)
             .and_then(|from_checked| Some(from_checked..maybe_prev_char_bytes_end(self, to)?))
             .map(|range| unsafe { self.get_unchecked(range) })
     }
 
-    #[inline(always)]
-    fn utf8_get_from(&self, from: usize) -> Option<&str> {
+    #[inline]
+    fn get_from_char(&self, from: usize) -> Option<&str> {
         maybe_prev_char_bytes_end(self, from)
             .map(|from_checked| unsafe { self.get_unchecked(from_checked..) })
     }
 
-    #[inline(always)]
-    fn utf8_get_to(&self, to: usize) -> Option<&str> {
+    #[inline]
+    fn get_to_char(&self, to: usize) -> Option<&str> {
         maybe_prev_char_bytes_end(self, to)
             .map(|to_checked| unsafe { self.get_unchecked(..to_checked) })
     }
 
-    #[inline(always)]
-    fn utf8_unsafe_get(&self, from: usize, to: usize) -> &str {
+    #[inline]
+    fn unchecked_get_char_range(&self, from: usize, to: usize) -> &str {
         unsafe {
             self.get_unchecked(prev_char_bytes_end(self, from)..prev_char_bytes_end(self, to))
         }
     }
 
-    #[inline(always)]
-    fn utf8_unsafe_get_from(&self, from: usize) -> &str {
+    #[inline]
+    fn unchecked_get_from_char(&self, from: usize) -> &str {
         unsafe { self.get_unchecked(prev_char_bytes_end(self, from)..) }
     }
 
-    #[inline(always)]
-    fn utf8_unsafe_get_to(&self, to: usize) -> &str {
+    #[inline]
+    fn unchecked_get_to_char(&self, to: usize) -> &str {
         unsafe { self.get_unchecked(..prev_char_bytes_end(self, to)) }
     }
 }
 
-impl UTF8Safe for String {
-    #[inline(always)]
+impl UTFSafe for String {
+    #[inline]
     fn truncate_width(&self, width: usize) -> (usize, &str) {
         self.as_str().truncate_width(width)
     }
 
-    #[inline(always)]
+    #[inline]
     fn truncate_width_start(&self, width: usize) -> (usize, &str) {
         self.as_str().truncate_width_start(width)
     }
 
-    #[inline(always)]
+    #[inline]
     fn truncate_if_wider(&self, width: usize) -> Result<&str, usize> {
         self.as_str().truncate_if_wider(width)
     }
 
-    #[inline(always)]
+    #[inline]
     fn truncate_if_wider_start(&self, width: usize) -> Result<&str, usize> {
         self.as_str().truncate_if_wider_start(width)
     }
 
-    #[inline(always)]
+    #[inline]
     fn width_split(&self, width: usize) -> (&str, Option<&str>) {
         self.as_str().width_split(width)
     }
 
-    #[inline(always)]
+    #[inline]
     fn width(&self) -> usize {
         UnicodeWidthStr::width(self.as_str())
     }
 
-    #[inline(always)]
+    #[inline]
     fn width_at(&self, at: usize) -> usize {
         self.as_str().width_at(at)
     }
 
-    #[inline(always)]
+    #[inline]
     fn char_len(&self) -> usize {
         self.chars().count()
     }
 
-    #[inline(always)]
+    #[inline]
     fn utf16_len(&self) -> usize {
         self.as_str().utf16_len()
     }
 
-    #[inline(always)]
-    fn utf8_split_at(&self, mid: usize) -> (&str, &str) {
-        self.as_str().utf8_split_at(mid)
+    #[inline]
+    fn split_at_char(&self, mid: usize) -> (&str, &str) {
+        self.as_str().split_at_char(mid)
     }
 
-    #[inline(always)]
-    fn utf8_cached_split_at(&self, mid: usize, utf8_len: usize) -> (&str, &str) {
-        self.as_str().utf8_cached_split_at(mid, utf8_len)
+    #[inline]
+    fn cached_split_at_char(&self, mid: usize, utf8_len: usize) -> (&str, &str) {
+        self.as_str().cached_split_at_char(mid, utf8_len)
     }
 
-    #[inline(always)]
-    fn utf8_get(&self, from: usize, to: usize) -> Option<&str> {
-        self.as_str().utf8_get(from, to)
+    #[inline]
+    fn get_char_range(&self, from: usize, to: usize) -> Option<&str> {
+        self.as_str().get_char_range(from, to)
     }
 
-    #[inline(always)]
-    fn utf8_get_from(&self, from: usize) -> Option<&str> {
-        self.as_str().utf8_get_from(from)
+    #[inline]
+    fn get_from_char(&self, from: usize) -> Option<&str> {
+        self.as_str().get_from_char(from)
     }
 
-    #[inline(always)]
-    fn utf8_get_to(&self, to: usize) -> Option<&str> {
-        self.as_str().utf8_get_to(to)
+    #[inline]
+    fn get_to_char(&self, to: usize) -> Option<&str> {
+        self.as_str().get_to_char(to)
     }
 
-    #[inline(always)]
-    fn utf8_unsafe_get(&self, from: usize, to: usize) -> &str {
-        self.as_str().utf8_unsafe_get(from, to)
+    #[inline]
+    fn unchecked_get_char_range(&self, from: usize, to: usize) -> &str {
+        self.as_str().unchecked_get_char_range(from, to)
     }
 
-    #[inline(always)]
-    fn utf8_unsafe_get_from(&self, from: usize) -> &str {
-        self.as_str().utf8_unsafe_get_from(from)
+    #[inline]
+    fn unchecked_get_from_char(&self, from: usize) -> &str {
+        self.as_str().unchecked_get_from_char(from)
     }
 
-    #[inline(always)]
-    fn utf8_unsafe_get_to(&self, to: usize) -> &str {
-        self.as_str().utf8_unsafe_get_to(to)
+    #[inline]
+    fn unchecked_get_to_char(&self, to: usize) -> &str {
+        self.as_str().unchecked_get_to_char(to)
     }
 }
 
-impl UTF8SafeStringExt for String {
-    #[inline(always)]
-    fn utf8_insert(&mut self, idx: usize, ch: char) {
+impl UTFSafeStringExt for String {
+    #[inline]
+    fn insert_at_char(&mut self, idx: usize, ch: char) {
         self.insert(prev_char_bytes_end(self, idx), ch);
     }
 
-    #[inline(always)]
-    fn utf8_insert_str(&mut self, idx: usize, string: &str) {
+    #[inline]
+    fn insert_at_char_with_utf8_idx(&mut self, idx: usize, ch: char) -> Utf8Byte {
+        let byte_idx = prev_char_bytes_end(self, idx);
+        self.insert(byte_idx, ch);
+        byte_idx
+    }
+
+    #[inline]
+    fn insert_at_char_with_utf16_idx(&mut self, idx: usize, ch: char) -> Utf16Byte {
+        let (byte_idx, utf16_byte) = prev_char_utf8_and_utf16(self, idx);
+        self.insert(byte_idx, ch);
+        utf16_byte
+    }
+
+    #[inline]
+    fn insert_str_at_char(&mut self, idx: usize, string: &str) {
         self.insert_str(prev_char_bytes_end(self, idx), string)
     }
 
-    #[inline(always)]
-    fn utf8_remove(&mut self, idx: usize) -> char {
+    #[inline]
+    fn insert_str_at_char_with_utf8_idx(&mut self, idx: usize, string: &str) -> Utf8Byte {
+        let byte_idx = prev_char_bytes_end(self, idx);
+        self.insert_str(byte_idx, string);
+        byte_idx
+    }
+
+    #[inline]
+    fn insert_str_at_char_with_utf16_idx(&mut self, idx: usize, string: &str) -> Utf16Byte {
+        let (byte_idx, utf16_byte) = prev_char_utf8_and_utf16(self, idx);
+        self.insert_str(byte_idx, string);
+        utf16_byte
+    }
+
+    #[inline]
+    fn remove_at_char(&mut self, idx: usize) -> char {
         self.remove(prev_char_bytes_end(self, idx))
     }
 
-    #[inline(always)]
-    fn utf8_replace_range(&mut self, range: Range<usize>, text: &str) {
+    #[inline]
+    fn remove_at_char_with_utf8_idx(&mut self, idx: usize) -> (Utf8Byte, char) {
+        let byte_idx = prev_char_bytes_end(self, idx);
+        (byte_idx, self.remove(byte_idx))
+    }
+
+    #[inline]
+    fn remove_at_char_with_utf16_idx(&mut self, idx: usize) -> (Utf16Byte, char) {
+        let (byte_idx, utf16_byte) = prev_char_utf8_and_utf16(self, idx);
+        (utf16_byte, self.remove(byte_idx))
+    }
+
+    #[inline]
+    fn replace_char_range(&mut self, range: Range<usize>, text: &str) {
         let start = prev_char_bytes_end(self, range.start);
         let end = prev_char_bytes_end(self, range.end);
         self.replace_range(start..end, text);
     }
 
-    #[inline(always)]
-    fn utf8_replace_from(&mut self, from: usize, string: &str) {
+    #[inline]
+    fn replace_from_char(&mut self, from: usize, string: &str) {
         self.truncate(prev_char_bytes_end(self, from));
         self.push_str(string);
     }
 
-    #[inline(always)]
-    fn utf8_replace_till(&mut self, to: usize, string: &str) {
+    #[inline]
+    fn replace_till_char(&mut self, to: usize, string: &str) {
         self.replace_range(..prev_char_bytes_end(self, to), string);
     }
 
-    #[inline(always)]
-    fn utf8_split_off(&mut self, at: usize) -> Self {
+    #[inline]
+    fn split_off_at_char(&mut self, at: usize) -> Self {
         self.split_off(prev_char_bytes_end(self, at))
     }
 }
 
-#[inline(always)]
-fn prev_char_bytes_end(text: &str, idx: usize) -> usize {
+#[inline]
+fn prev_char_bytes_end(text: &str, idx: usize) -> Utf8Byte {
     if idx == 0 {
-        return idx;
+        return 0;
     }
     if let Some((byte_idx, ch)) = text.char_indices().nth(idx - 1) {
         return byte_idx + ch.len_utf8();
@@ -343,7 +394,30 @@ fn prev_char_bytes_end(text: &str, idx: usize) -> usize {
     )
 }
 
-#[inline(always)]
+#[inline]
+fn prev_char_utf8_and_utf16(text: &str, idx: usize) -> (Utf8Byte, Utf16Byte) {
+    if idx == 0 {
+        return (0, 0);
+    }
+    let mut counter = idx;
+    let mut utf8_byte = 0;
+    let mut utf16_byte = 0;
+    for ch in text.chars() {
+        counter -= 1;
+        utf8_byte += ch.len_utf8();
+        utf16_byte += ch.len_utf16();
+        if counter == 0 {
+            return (utf8_byte, utf16_byte);
+        }
+    }
+    panic!(
+        "Index out of bound! Max len {} with index {}",
+        text.char_len(),
+        idx
+    )
+}
+
+#[inline]
 fn maybe_prev_char_bytes_end(text: &str, idx: usize) -> Option<usize> {
     if idx == 0 {
         return Some(idx);

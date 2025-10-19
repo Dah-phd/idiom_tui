@@ -1,25 +1,122 @@
 use crate::utils::chunks::ByteChunks;
 
-use super::{CharLimitedWidths, StrChunks, UTF8Safe, UTF8SafeStringExt, WriteChunks};
+use super::{CharLimitedWidths, StrChunks, UTFSafe, UTFSafeStringExt, WriteChunks};
 const TEXT: &str = "123🚀13";
 
 #[test]
-fn test_utf8_insert_str() {
+fn test_insert_str_at_char() {
     let mut s = String::new();
-    s.utf8_insert_str(0, TEXT);
+    let mut s_utf8 = String::new();
+    let mut s_utf16 = String::new();
+    s.insert_str_at_char(0, TEXT);
+    let utf8_idx = s_utf8.insert_str_at_char_with_utf8_idx(0, TEXT);
+    let utf16_idx = s_utf16.insert_str_at_char_with_utf16_idx(0, TEXT);
     assert_eq!(s, TEXT);
-    s.utf8_insert_str(4, TEXT);
+    assert_eq!(s_utf8, TEXT);
+    assert_eq!(utf8_idx, 0);
+    assert_eq!(s_utf16, TEXT);
+    assert_eq!(utf16_idx, 0);
+    s.insert_str_at_char(4, TEXT);
+    let utf8_idx = s_utf8.insert_str_at_char_with_utf8_idx(4, TEXT);
+    let utf16_idx = s_utf16.insert_str_at_char_with_utf16_idx(4, TEXT);
     assert!(&s == "123🚀123🚀1313");
+    assert_eq!(s, s_utf8);
+    assert_eq!(utf8_idx, 7);
+    assert_eq!(s, s_utf16);
+    assert_eq!(utf16_idx, 5);
 }
 
 #[test]
-fn test_utf8_insert() {
+fn test_insert_str_at_char_last() {
+    let mut s = String::from("🚀1");
+    let mut s_utf8 = String::from("🚀1");
+    let mut s_utf16 = String::from("🚀1");
+    s.insert_str_at_char(2, "1🚀");
+    assert_eq!(s_utf8.insert_str_at_char_with_utf8_idx(2, "1🚀"), 5);
+    assert_eq!(s_utf16.insert_str_at_char_with_utf16_idx(2, "1🚀"), 3);
+    assert_eq!(&s, "🚀11🚀");
+    assert_eq!(&s, &s_utf8);
+    assert_eq!(&s, &s_utf16);
+}
+
+#[test]
+#[should_panic]
+fn test_insert_str_at_char_panic() {
+    let mut s = String::from("🚀1");
+    s.insert_str_at_char(3, "1🚀");
+}
+
+#[test]
+#[should_panic]
+fn test_insert_str_at_char_utf8_panic() {
+    let mut s = String::from("🚀1");
+    s.insert_str_at_char_with_utf8_idx(3, "1🚀");
+}
+
+#[test]
+#[should_panic]
+fn test_insert_str_at_char_utf16_panic() {
+    let mut s = String::from("🚀1");
+    s.insert_str_at_char_with_utf16_idx(3, "1🚀");
+}
+
+#[test]
+fn test_insert_at_char() {
     let mut s = String::new();
-    s.utf8_insert(0, '🚀');
+    let mut s_utf8 = String::new();
+    let mut s_utf16 = String::new();
+    s.insert_at_char(0, '🚀');
+    s_utf8.insert_at_char_with_utf8_idx(0, '🚀');
+    s_utf16.insert_at_char_with_utf16_idx(0, '🚀');
     assert!(&s == "🚀");
-    s.utf8_insert(1, '🚀');
-    s.utf8_insert(2, 'r');
+    assert!(&s_utf8 == "🚀");
+    assert!(&s_utf16 == "🚀");
+
+    s.insert_at_char(1, '🚀');
+    s.insert_at_char(2, 'r');
     assert!(&s == "🚀🚀r");
+
+    assert_eq!(s_utf8.insert_at_char_with_utf8_idx(1, '🚀'), 4);
+    assert_eq!(s_utf8.insert_at_char_with_utf8_idx(2, 'r'), 8);
+    assert!(&s_utf8 == "🚀🚀r");
+
+    assert_eq!(s_utf16.insert_at_char_with_utf16_idx(1, '🚀'), 2);
+    assert_eq!(s_utf16.insert_at_char_with_utf16_idx(2, 'r'), 4);
+    assert!(&s_utf16 == "🚀🚀r");
+}
+
+#[test]
+fn test_insert_at_char_last() {
+    let mut s = String::from("🚀1");
+    let mut s_utf8 = String::from("🚀1");
+    let mut s_utf16 = String::from("🚀1");
+    s.insert_at_char(2, '🚀');
+    assert_eq!(s_utf8.insert_at_char_with_utf8_idx(2, '🚀'), 5);
+    assert_eq!(s_utf16.insert_at_char_with_utf16_idx(2, '🚀'), 3);
+    assert_eq!(&s, "🚀1🚀");
+    assert_eq!(&s, &s_utf8);
+    assert_eq!(&s, &s_utf16);
+}
+
+#[test]
+#[should_panic]
+fn test_insert_at_char_panic() {
+    let mut s = String::from("🚀1");
+    s.insert_at_char(3, '🚀');
+}
+
+#[test]
+#[should_panic]
+fn test_insert_at_char_utf8_panic() {
+    let mut s = String::from("🚀1");
+    s.insert_at_char_with_utf8_idx(3, '🚀');
+}
+
+#[test]
+#[should_panic]
+fn test_insert_at_char_utf16_panic() {
+    let mut s = String::from("🚀1");
+    s.insert_at_char_with_utf16_idx(3, '🚀');
 }
 
 #[test]
@@ -77,8 +174,8 @@ fn test_split_std() {
 
 #[test]
 fn test_split_utf8() {
-    assert_eq!(TEXT.split_at(3), TEXT.utf8_split_at(3));
-    assert_eq!(("123🚀", "13"), TEXT.utf8_split_at(4));
+    assert_eq!(TEXT.split_at(3), TEXT.split_at_char(3));
+    assert_eq!(("123🚀", "13"), TEXT.split_at_char(4));
 }
 
 /// example issue
@@ -93,13 +190,13 @@ fn test_utf8_split_off_panic() {
 #[should_panic]
 fn test_utf8_split_off_out_of_bounds() {
     let mut s = String::from(TEXT);
-    s.utf8_split_off(30);
+    s.split_off_at_char(30);
 }
 
 #[test]
 fn test_utf8_split_off() {
     let mut s = String::from(TEXT);
-    assert_eq!(s.utf8_split_off(4), String::from("13"));
+    assert_eq!(s.split_off_at_char(4), String::from("13"));
     assert_eq!(s, "123🚀");
 }
 
@@ -117,9 +214,9 @@ fn test_utf8_replace_range() {
     s.replace_range(0..0, "asd");
     assert!(&s == "asd");
     s.clear();
-    s.utf8_replace_range(0..0, "🚀🚀");
+    s.replace_char_range(0..0, "🚀🚀");
     assert_eq!(&s, "🚀🚀");
-    s.utf8_replace_range(1..2, "asd");
+    s.replace_char_range(1..2, "asd");
     assert_eq!(&s, "🚀asd");
 }
 
@@ -127,26 +224,26 @@ fn test_utf8_replace_range() {
 #[should_panic]
 fn test_utf8_replace_range_panic() {
     let mut s = String::new();
-    s.utf8_replace_range(0..1, "panic");
+    s.replace_char_range(0..1, "panic");
 }
 
 #[test]
 fn test_replace_from() {
     let mut s = String::from("text");
-    s.utf8_replace_from(0, "123");
+    s.replace_from_char(0, "123");
     assert!(&s == "123");
     s.clear();
-    s.utf8_replace_from(0, "123");
+    s.replace_from_char(0, "123");
     assert!(&s == "123");
 }
 
 #[test]
 fn test_replace_till() {
     let mut s = String::from("🚀🚀");
-    s.utf8_replace_till(1, "asd");
+    s.replace_till_char(1, "asd");
     assert!(&s == "asd🚀");
     s.clear();
-    s.utf8_replace_till(0, "🚀");
+    s.replace_till_char(0, "🚀");
     assert_eq!(&s, "🚀");
 }
 
@@ -154,7 +251,7 @@ fn test_replace_till() {
 fn test_utf8_replaces() {
     let mut s = String::from(TEXT);
     let mut std_s = s.clone();
-    s.utf8_replace_from(4, "replace_with");
+    s.replace_from_char(4, "replace_with");
     std_s.replace_range(7.., "replace_with");
     assert_eq!(s, std_s);
 }
@@ -177,41 +274,90 @@ fn test_std_remove() {
 #[test]
 fn test_utf8_remove() {
     let mut s = String::from(TEXT);
+    let mut s_utf8 = String::from(TEXT);
+    let mut s_utf16 = String::from(TEXT);
+
     assert_eq!(s.len(), 9);
     assert_eq!(s.char_len(), 6);
     assert_eq!(s.width(), 7);
-    assert_eq!(s.utf8_remove(4), '1');
-    assert_eq!(s.utf8_remove(3), '🚀');
+    assert_eq!(s.remove_at_char(4), '1');
+    assert_eq!(s_utf8.remove_at_char_with_utf8_idx(4), (7, '1'));
+    assert_eq!(s_utf16.remove_at_char_with_utf16_idx(4), (5, '1'));
+    assert_eq!(s.remove_at_char(3), '🚀');
+    assert_eq!(s_utf8.remove_at_char_with_utf8_idx(3), (3, '🚀'));
+    assert_eq!(s_utf16.remove_at_char_with_utf16_idx(3), (3, '🚀'));
     assert_eq!(&s, "1233");
 }
 
 #[test]
+fn test_char_remove_last() {
+    let mut s = String::from("🚀");
+    let r = s.remove_at_char(0);
+    assert_eq!(r, '🚀')
+}
+
+#[test]
+#[should_panic]
+fn test_char_remove_panics() {
+    let mut s = String::from("1");
+    s.remove_at_char(1);
+}
+
+#[test]
+fn test_utf8_remove_last() {
+    let mut s = String::from("🚀");
+    let r = s.remove_at_char_with_utf8_idx(0);
+    assert_eq!(r, (0, '🚀'))
+}
+
+#[test]
+#[should_panic]
+fn test_utf8_remove_panics() {
+    let mut s = String::from("1");
+    s.remove_at_char_with_utf8_idx(1);
+}
+
+#[test]
+fn test_utf16_remove_last() {
+    let mut s = String::from("🚀");
+    let r = s.remove_at_char_with_utf16_idx(0);
+    assert_eq!(r, (0, '🚀'))
+}
+
+#[test]
+#[should_panic]
+fn test_utf16_remove_panics() {
+    let mut s = String::from("1");
+    s.remove_at_char_with_utf16_idx(1);
+}
+
+#[test]
 fn test_utf8_get() {
-    assert_eq!(TEXT.utf8_get(0, 10), None);
-    assert_eq!(TEXT.utf8_get(0, 3), Some("123"));
-    assert_eq!(TEXT.utf8_get(3, 4), Some("🚀"));
+    assert_eq!(TEXT.get_char_range(0, 10), None);
+    assert_eq!(TEXT.get_char_range(0, 3), Some("123"));
+    assert_eq!(TEXT.get_char_range(3, 4), Some("🚀"));
 }
 
 #[test]
 fn test_utf8_get_from() {
-    assert_eq!(TEXT.utf8_get_from(10), None);
-    assert_eq!(TEXT.utf8_get_from(0), Some(TEXT));
-    assert_eq!(TEXT.utf8_get_from(3), Some("🚀13"));
-    assert_eq!(TEXT.utf8_get_from(4), Some("13"));
+    assert_eq!(TEXT.get_from_char(10), None);
+    assert_eq!(TEXT.get_from_char(0), Some(TEXT));
+    assert_eq!(TEXT.get_from_char(3), Some("🚀13"));
+    assert_eq!(TEXT.get_from_char(4), Some("13"));
 }
 
 #[test]
 fn test_utf8_get_till() {
-    assert_eq!(TEXT.utf8_get_to(10), None);
-    assert_eq!(TEXT.utf8_get_to(3), Some("123"));
-    assert_eq!(TEXT.utf8_get_to(4), Some("123🚀"));
+    assert_eq!(TEXT.get_to_char(10), None);
+    assert_eq!(TEXT.get_to_char(3), Some("123"));
+    assert_eq!(TEXT.get_to_char(4), Some("123🚀"));
 }
 
 #[test]
 #[should_panic]
 fn test_utf8_remove_panic() {
     let mut s = String::new();
-    s.utf8_remove(0);
+    s.remove_at_char(0);
 }
 
 #[test]

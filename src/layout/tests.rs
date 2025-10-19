@@ -468,7 +468,6 @@ fn left_top_cornet() {
     assert_eq!(Rect::new(0, 0, 60, 5), rect);
 }
 
-
 #[test]
 fn right_bot_cornet() {
     let rect = Rect::new(0, 0, 40, 2).right_bot_corner(5, 60);

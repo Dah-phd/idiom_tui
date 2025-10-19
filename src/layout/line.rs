@@ -1,4 +1,4 @@
-use crate::{backend::Backend, utils::UTF8Safe, widgets::Writable};
+use crate::{backend::Backend, utils::UTFSafe, widgets::Writable};
 use std::ops::{AddAssign, SubAssign};
 
 #[derive(Debug, Default, Clone, PartialEq)]

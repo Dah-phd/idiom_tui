@@ -3,7 +3,7 @@ mod state;
 use crate::{
     backend::Backend,
     layout::{IterLines, Line, RectIter},
-    StrChunks, UTF8Safe, WriteChunks,
+    StrChunks, UTFSafe, WriteChunks,
 };
 pub use state::State;
 use std::fmt::Display;

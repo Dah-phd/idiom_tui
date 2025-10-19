@@ -1,4 +1,4 @@
-use super::{backend::Backend, UTF8Safe};
+use super::{backend::Backend, UTFSafe};
 use core::ops::{Add, AddAssign, Range};
 use unicode_width::UnicodeWidthChar;
 

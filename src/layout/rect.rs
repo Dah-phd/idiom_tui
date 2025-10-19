@@ -3,7 +3,7 @@ use crate::{
     {
         backend::Backend,
         layout::{BorderSet, Borders, Line, BORDERS},
-        utils::UTF8Safe,
+        utils::UTFSafe,
     },
 };
 

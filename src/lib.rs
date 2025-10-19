@@ -6,9 +6,7 @@ pub mod utils;
 pub mod widgets;
 
 pub use backend::Backend;
-pub use utils::{
-    ByteChunks, CharLimitedWidths, StrChunks, UTF8Safe, UTF8SafeStringExt, WriteChunks,
-};
+pub use utils::{ByteChunks, CharLimitedWidths, StrChunks, UTFSafe, UTFSafeStringExt, WriteChunks};
 
 /// This can easily gorow to be a framework itself
 pub fn count_as_string(len: usize) -> String {
