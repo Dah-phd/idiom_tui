@@ -1,5 +1,5 @@
 ## Includes only major changes (manual updates)
-# Version 0.2.0 (breaking pre 1)
+# Version 1.0.0 (breaking)
 - renames of extension traits
 
 # Version 0.1.7
