@@ -25,7 +25,7 @@ impl Iterator for CharLimitedWidths<'_> {
         let ch = self.chars.next()?;
         match ch.width() {
             Some(width) if width <= self.limit => Some((ch, width)),
-            _ => Some(('⚠', 1)),
+            _ => Some(('‽', 1)),
         }
     }
 }
@@ -35,7 +35,7 @@ impl DoubleEndedIterator for CharLimitedWidths<'_> {
         let ch = self.chars.next_back()?;
         match ch.width() {
             Some(width) if width <= self.limit => Some((ch, width)),
-            _ => Some(('⚠', 1)),
+            _ => Some(('‽', 1)),
         }
     }
 }
