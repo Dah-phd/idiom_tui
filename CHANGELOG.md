@@ -1,4 +1,8 @@
 ## Includes only major changes (manual updates)
+# Version 1.0.1
+- moved chunk width over 3 to '‽'
+- updated deps
+
 # Version 1.0.0 (breaking)
 - renames of extension traits
 

@@ -515,7 +515,7 @@ fn test_char_limited_chunk() {
     assert_eq!(chunks.next(), Some(('a', 1)));
     assert_eq!(chunks.next(), None);
     let mut chunks = CharLimitedWidths::new(text, 1);
-    assert_eq!(chunks.next(), Some(('⚠', 1)));
+    assert_eq!(chunks.next(), Some(('‽', 1)));
     assert_eq!(chunks.next(), Some(('a', 1)));
     assert_eq!(chunks.next(), None);
 }
